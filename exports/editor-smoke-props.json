@@ -1,0 +1,548 @@
+{
+  "layers": [
+    {
+      "id": "smoke-0",
+      "name": "ANTES Y DESPUÉS",
+      "text": "ANTES Y DESPUÉS",
+      "preset": {
+        "id": "depth-punch",
+        "name": "Depth Punch",
+        "category": "ZOOM",
+        "duration": 18,
+        "mode": "text",
+        "staggerDelay": 0,
+        "description": "Desde cámara hacia su posición con profundidad y overshoot.",
+        "easing": "expoOut",
+        "overshoot": 1.06,
+        "keyframes": [
+          {
+            "frame": 0,
+            "scale": 2.6,
+            "blur": 12,
+            "rotation": -1.5,
+            "opacity": 1,
+            "easingToNext": "expoOut"
+          },
+          {
+            "frame": 11,
+            "scale": 0.98,
+            "blur": 1,
+            "rotation": 0.2,
+            "easingToNext": "easeOut"
+          },
+          {
+            "frame": 15,
+            "scale": 1.035,
+            "blur": 0,
+            "rotation": 0,
+            "easingToNext": "easeInOut"
+          },
+          {
+            "frame": 18,
+            "scale": 1
+          }
+        ]
+      },
+      "typography": {
+        "fontFamily": "\"Inter\", Arial, sans-serif",
+        "fontSize": 132,
+        "fontWeight": 700,
+        "italic": false,
+        "uppercase": true,
+        "color": "#ffffff",
+        "letterSpacing": -3,
+        "wordSpacing": 0,
+        "lineHeight": 1.02,
+        "textAlign": "center",
+        "strokeColor": "#000000",
+        "strokeWidth": 7,
+        "shadowColor": "#000000",
+        "shadowBlur": 16,
+        "shadowOpacity": 0.4,
+        "shadowX": 0,
+        "shadowY": 6,
+        "fill": {
+          "type": "solid",
+          "color": "#ffffff"
+        },
+        "strokes": [
+          {
+            "color": "#000000",
+            "width": 7
+          }
+        ],
+        "glow": null,
+        "box": null,
+        "secondary": null
+      },
+      "keywords": {},
+      "overrides": {
+        "duration": 18,
+        "delay": 0,
+        "initialScale": 2.6,
+        "scaleX": 1,
+        "scaleY": 1,
+        "x": 0,
+        "y": 0,
+        "translateZ": 0,
+        "rotation": -1.5,
+        "opacity": 1,
+        "blur": 12,
+        "skewX": 0,
+        "skewY": 0,
+        "animatedLetterSpacing": 0,
+        "overshoot": 1.06,
+        "perspective": 1200,
+        "rotateX": 0,
+        "rotateY": 0,
+        "transformOriginX": 50,
+        "transformOriginY": 50,
+        "anchor": "CENTER",
+        "spring": 0,
+        "bounce": 0,
+        "staggerDelay": 0,
+        "mode": "text",
+        "easing": "expoOut"
+      },
+      "animation": {
+        "in": {
+          "preset": {
+            "id": "depth-punch",
+            "name": "Depth Punch",
+            "category": "ZOOM",
+            "duration": 18,
+            "mode": "text",
+            "staggerDelay": 0,
+            "description": "Desde cámara hacia su posición con profundidad y overshoot.",
+            "easing": "expoOut",
+            "overshoot": 1.06,
+            "keyframes": [
+              {
+                "frame": 0,
+                "scale": 2.6,
+                "blur": 12,
+                "rotation": -1.5,
+                "opacity": 1,
+                "easingToNext": "expoOut"
+              },
+              {
+                "frame": 11,
+                "scale": 0.98,
+                "blur": 1,
+                "rotation": 0.2,
+                "easingToNext": "easeOut"
+              },
+              {
+                "frame": 15,
+                "scale": 1.035,
+                "blur": 0,
+                "rotation": 0,
+                "easingToNext": "easeInOut"
+              },
+              {
+                "frame": 18,
+                "scale": 1
+              }
+            ]
+          },
+          "overrides": {
+            "duration": 18,
+            "delay": 0,
+            "initialScale": 2.6,
+            "scaleX": 1,
+            "scaleY": 1,
+            "x": 0,
+            "y": 0,
+            "translateZ": 0,
+            "rotation": -1.5,
+            "opacity": 1,
+            "blur": 12,
+            "skewX": 0,
+            "skewY": 0,
+            "animatedLetterSpacing": 0,
+            "overshoot": 1.06,
+            "perspective": 1200,
+            "rotateX": 0,
+            "rotateY": 0,
+            "transformOriginX": 50,
+            "transformOriginY": 50,
+            "anchor": "CENTER",
+            "spring": 0,
+            "bounce": 0,
+            "staggerDelay": 0,
+            "mode": "text",
+            "easing": "expoOut"
+          }
+        },
+        "holdFrames": 30,
+        "out": null,
+        "loop": null
+      },
+      "positionX": 0,
+      "positionY": 0,
+      "rotation": 0,
+      "startFrame": 0,
+      "visible": true,
+      "locked": false,
+      "maxWidth": 0.84,
+      "maxHeight": 0.84,
+      "autoFit": true,
+      "autoLineBreak": true,
+      "safeZone": 0.08,
+      "durationFrames": 60
+    },
+    {
+      "id": "smoke-1",
+      "name": "MÁS POSIBILIDADES",
+      "text": "MÁS POSIBILIDADES",
+      "preset": {
+        "id": "mask-left",
+        "name": "Cortina lateral",
+        "category": "REVEAL",
+        "description": "Una máscara descubre la frase de izquierda a derecha.",
+        "duration": 24,
+        "mode": "text",
+        "staggerDelay": 0,
+        "easing": "linear",
+        "mask": "left",
+        "keyframes": [
+          {
+            "frame": 0,
+            "opacity": 1
+          },
+          {
+            "frame": 24,
+            "opacity": 1
+          }
+        ]
+      },
+      "typography": {
+        "fontFamily": "\"Barlow Condensed\", Arial, sans-serif",
+        "fontSize": 132,
+        "fontWeight": 700,
+        "italic": false,
+        "uppercase": true,
+        "color": "#ffffff",
+        "letterSpacing": -3,
+        "wordSpacing": 0,
+        "lineHeight": 1.02,
+        "textAlign": "center",
+        "strokeColor": "#000000",
+        "strokeWidth": 7,
+        "shadowColor": "#000000",
+        "shadowBlur": 16,
+        "shadowOpacity": 0.4,
+        "shadowX": 0,
+        "shadowY": 6,
+        "fill": {
+          "type": "solid",
+          "color": "#ffffff"
+        },
+        "strokes": [
+          {
+            "color": "#000000",
+            "width": 7
+          }
+        ],
+        "glow": null,
+        "box": null,
+        "secondary": null
+      },
+      "keywords": {},
+      "overrides": {
+        "duration": 24,
+        "delay": 0,
+        "initialScale": 1,
+        "scaleX": 1,
+        "scaleY": 1,
+        "x": 0,
+        "y": 0,
+        "translateZ": 0,
+        "rotation": 0,
+        "opacity": 1,
+        "blur": 0,
+        "skewX": 0,
+        "skewY": 0,
+        "animatedLetterSpacing": 0,
+        "overshoot": 1,
+        "perspective": 1200,
+        "rotateX": 0,
+        "rotateY": 0,
+        "transformOriginX": 50,
+        "transformOriginY": 50,
+        "anchor": "CENTER",
+        "spring": 0,
+        "bounce": 0,
+        "staggerDelay": 0,
+        "mode": "text",
+        "easing": "linear"
+      },
+      "animation": {
+        "in": {
+          "preset": {
+            "id": "mask-left",
+            "name": "Cortina lateral",
+            "category": "REVEAL",
+            "description": "Una máscara descubre la frase de izquierda a derecha.",
+            "duration": 24,
+            "mode": "text",
+            "staggerDelay": 0,
+            "easing": "linear",
+            "mask": "left",
+            "keyframes": [
+              {
+                "frame": 0,
+                "opacity": 1
+              },
+              {
+                "frame": 24,
+                "opacity": 1
+              }
+            ]
+          },
+          "overrides": {
+            "duration": 24,
+            "delay": 0,
+            "initialScale": 1,
+            "scaleX": 1,
+            "scaleY": 1,
+            "x": 0,
+            "y": 0,
+            "translateZ": 0,
+            "rotation": 0,
+            "opacity": 1,
+            "blur": 0,
+            "skewX": 0,
+            "skewY": 0,
+            "animatedLetterSpacing": 0,
+            "overshoot": 1,
+            "perspective": 1200,
+            "rotateX": 0,
+            "rotateY": 0,
+            "transformOriginX": 50,
+            "transformOriginY": 50,
+            "anchor": "CENTER",
+            "spring": 0,
+            "bounce": 0,
+            "staggerDelay": 0,
+            "mode": "text",
+            "easing": "linear"
+          }
+        },
+        "holdFrames": 30,
+        "out": null,
+        "loop": null
+      },
+      "positionX": 0,
+      "positionY": 0,
+      "rotation": 0,
+      "startFrame": 60,
+      "visible": true,
+      "locked": false,
+      "maxWidth": 0.84,
+      "maxHeight": 0.84,
+      "autoFit": true,
+      "autoLineBreak": true,
+      "safeZone": 0.08,
+      "durationFrames": 60,
+      "wordTiming": {
+        "mode": "color",
+        "color": "#ffe94a",
+        "words": [
+          {
+            "word": "MÁS",
+            "start": 0,
+            "end": 30
+          },
+          {
+            "word": "POSIBILIDADES",
+            "start": 30,
+            "end": 60
+          }
+        ]
+      }
+    },
+    {
+      "id": "smoke-2",
+      "name": "HECHO PARA CREAR",
+      "text": "HECHO PARA CREAR",
+      "preset": {
+        "id": "mask-center",
+        "name": "Apertura central",
+        "category": "REVEAL",
+        "description": "El texto se abre desde el centro hacia ambos lados.",
+        "duration": 24,
+        "mode": "text",
+        "staggerDelay": 0,
+        "easing": "linear",
+        "mask": "center",
+        "keyframes": [
+          {
+            "frame": 0,
+            "opacity": 1
+          },
+          {
+            "frame": 24,
+            "opacity": 1
+          }
+        ]
+      },
+      "typography": {
+        "fontFamily": "\"Fraunces\", Georgia, serif",
+        "fontSize": 132,
+        "fontWeight": 700,
+        "italic": false,
+        "uppercase": true,
+        "color": "#ffffff",
+        "letterSpacing": -3,
+        "wordSpacing": 0,
+        "lineHeight": 1.02,
+        "textAlign": "center",
+        "strokeColor": "#000000",
+        "strokeWidth": 7,
+        "shadowColor": "#000000",
+        "shadowBlur": 16,
+        "shadowOpacity": 0.4,
+        "shadowX": 0,
+        "shadowY": 6,
+        "fill": {
+          "type": "solid",
+          "color": "#ffffff"
+        },
+        "strokes": [
+          {
+            "color": "#000000",
+            "width": 7
+          }
+        ],
+        "glow": null,
+        "box": null,
+        "secondary": null
+      },
+      "keywords": {},
+      "overrides": {
+        "duration": 24,
+        "delay": 0,
+        "initialScale": 1,
+        "scaleX": 1,
+        "scaleY": 1,
+        "x": 0,
+        "y": 0,
+        "translateZ": 0,
+        "rotation": 0,
+        "opacity": 1,
+        "blur": 0,
+        "skewX": 0,
+        "skewY": 0,
+        "animatedLetterSpacing": 0,
+        "overshoot": 1,
+        "perspective": 1200,
+        "rotateX": 0,
+        "rotateY": 0,
+        "transformOriginX": 50,
+        "transformOriginY": 50,
+        "anchor": "CENTER",
+        "spring": 0,
+        "bounce": 0,
+        "staggerDelay": 0,
+        "mode": "text",
+        "easing": "linear"
+      },
+      "animation": {
+        "in": {
+          "preset": {
+            "id": "mask-center",
+            "name": "Apertura central",
+            "category": "REVEAL",
+            "description": "El texto se abre desde el centro hacia ambos lados.",
+            "duration": 24,
+            "mode": "text",
+            "staggerDelay": 0,
+            "easing": "linear",
+            "mask": "center",
+            "keyframes": [
+              {
+                "frame": 0,
+                "opacity": 1
+              },
+              {
+                "frame": 24,
+                "opacity": 1
+              }
+            ]
+          },
+          "overrides": {
+            "duration": 24,
+            "delay": 0,
+            "initialScale": 1,
+            "scaleX": 1,
+            "scaleY": 1,
+            "x": 0,
+            "y": 0,
+            "translateZ": 0,
+            "rotation": 0,
+            "opacity": 1,
+            "blur": 0,
+            "skewX": 0,
+            "skewY": 0,
+            "animatedLetterSpacing": 0,
+            "overshoot": 1,
+            "perspective": 1200,
+            "rotateX": 0,
+            "rotateY": 0,
+            "transformOriginX": 50,
+            "transformOriginY": 50,
+            "anchor": "CENTER",
+            "spring": 0,
+            "bounce": 0,
+            "staggerDelay": 0,
+            "mode": "text",
+            "easing": "linear"
+          }
+        },
+        "holdFrames": 30,
+        "out": null,
+        "loop": {
+          "kind": "breathe",
+          "speed": 0.8,
+          "intensity": 1,
+          "perUnit": false
+        }
+      },
+      "positionX": 0,
+      "positionY": 0,
+      "rotation": 0,
+      "startFrame": 120,
+      "visible": true,
+      "locked": false,
+      "maxWidth": 0.84,
+      "maxHeight": 0.84,
+      "autoFit": true,
+      "autoLineBreak": true,
+      "safeZone": 0.08,
+      "durationFrames": 60,
+      "transformKeys": [
+        {
+          "frame": 0,
+          "x": 0,
+          "y": 0,
+          "scale": 1,
+          "rotation": 0,
+          "opacity": 1,
+          "easing": "smooth"
+        },
+        {
+          "frame": 59,
+          "x": 80,
+          "y": 0,
+          "scale": 1,
+          "rotation": 5,
+          "opacity": 1,
+          "easing": "smooth"
+        }
+      ]
+    }
+  ],
+  "background": "green",
+  "customBackground": "#000000"
+}

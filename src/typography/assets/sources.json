@@ -1,0 +1,60 @@
+[
+  {
+    "id": "barlow-condensed",
+    "version": "5.3.0",
+    "source": "https://registry.npmjs.org/@fontsource/barlow-condensed/-/barlow-condensed-5.3.0.tgz",
+    "integrity": "sha512-RA7MmIx0v3eQ6Gcf74qLVLOwLB0GpPOzx+eU9iG/AmCnSJGcIWYeU8y6CEMGZ210MGwGg5CZhzLkkvyZdTTk1g==",
+    "weights": [
+      400,
+      600,
+      700,
+      900
+    ],
+    "styles": [
+      "normal",
+      "italic"
+    ]
+  },
+  {
+    "id": "fraunces",
+    "version": "5.3.0",
+    "source": "https://registry.npmjs.org/@fontsource/fraunces/-/fraunces-5.3.0.tgz",
+    "integrity": "sha512-LEHTOBiZufQzAvnAe2rZ8ZknbDS28Q9kzwb0L+gZJEmjLGr8hhZ/5NuHXwDuHBWhVXYoiGGXmrb0H6Ko/RrHTg==",
+    "weights": [
+      400,
+      700,
+      900
+    ],
+    "styles": [
+      "normal",
+      "italic"
+    ]
+  },
+  {
+    "id": "syne",
+    "version": "5.3.0",
+    "source": "https://registry.npmjs.org/@fontsource/syne/-/syne-5.3.0.tgz",
+    "integrity": "sha512-kRWNVsrdYw+08I4EM1SYPe2JovdTzUI0kMVALVRsKmjRdkrVoun1qddSlDAglz5J9LbgUpJSkWmw6BYnmKdGuw==",
+    "weights": [
+      400,
+      600,
+      700,
+      800
+    ],
+    "styles": [
+      "normal"
+    ]
+  },
+  {
+    "id": "shadows-into-light",
+    "version": "5.3.0",
+    "source": "https://registry.npmjs.org/@fontsource/shadows-into-light/-/shadows-into-light-5.3.0.tgz",
+    "integrity": "sha512-3dvv0i8/ZwLMY08AAlTLivHUdNQYB6Fxe92d7BZiGbHY2GQnCxEd8JC9CBzxTiP4iyWNa6OZn9LXF+xjc9LaGw==",
+    "weights": [
+      400
+    ],
+    "styles": [
+      "normal"
+    ]
+  }
+]

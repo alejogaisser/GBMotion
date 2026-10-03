@@ -1,0 +1,13 @@
+node_modules/
+dist/
+exports/*.mp4
+*.tsbuildinfo
+output/
+tmp/
+backups/
+.env
+.env.*
+.pnpm-store/
+exports/*.mov
+exports/*.webm
+*.log

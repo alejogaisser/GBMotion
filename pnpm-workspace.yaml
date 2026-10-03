@@ -1,0 +1,7 @@
+packages:
+  - .
+
+packageImportMethod: copy
+
+allowBuilds:
+  esbuild: true

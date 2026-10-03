@@ -1,0 +1,73 @@
+{
+  "layers": [
+    {
+      "id": "text-1",
+      "name": "EMPEZAR DE CERO",
+      "text": "EMPEZAR DE CERO",
+      "positionX": 0,
+      "positionY": 0,
+      "visible": true,
+      "background": "green",
+      "keywords": {},
+      "typography": {
+        "fontFamily": "Inter, Arial, sans-serif",
+        "fontSize": 150,
+        "fontWeight": 900,
+        "italic": false,
+        "uppercase": true,
+        "color": "#ffffff",
+        "letterSpacing": -3,
+        "wordSpacing": 0,
+        "lineHeight": 0.9,
+        "textAlign": "center",
+        "strokeColor": "#000000",
+        "strokeWidth": 0,
+        "shadowColor": "#000000",
+        "shadowBlur": 18,
+        "shadowOpacity": 0.3
+      },
+      "overrides": {
+        "duration": 18,
+        "delay": 0,
+        "initialScale": 5,
+        "scaleX": 1,
+        "scaleY": 1,
+        "x": 0,
+        "y": 0,
+        "rotation": -3,
+        "opacity": 1,
+        "blur": 28,
+        "skewX": 0,
+        "skewY": 0,
+        "animatedLetterSpacing": 0,
+        "overshoot": 1.06,
+        "perspective": 1200,
+        "rotateX": 0,
+        "rotateY": 0,
+        "spring": 0,
+        "bounce": 0,
+        "staggerDelay": 0,
+        "mode": "text",
+        "easing": "expoOut"
+      },
+      "preset": {
+        "id": "depth-punch",
+        "name": "Depth Punch",
+        "category": "ZOOM",
+        "description": "Demo",
+        "duration": 18,
+        "mode": "text",
+        "staggerDelay": 0,
+        "easing": "expoOut",
+        "keyframes": [
+          { "frame": 0, "scale": 5, "blur": 28, "rotation": -3 },
+          { "frame": 10, "scale": 0.92, "blur": 2 },
+          { "frame": 14, "scale": 1.06, "blur": 0 },
+          { "frame": 18, "scale": 1 }
+        ]
+      }
+    }
+  ],
+  "background": "green",
+  "customBackground": "#121212"
+}
