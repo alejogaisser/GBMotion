@@ -1,0 +1,204 @@
+{
+  "task": "transcribe",
+  "language": "spanish",
+  "duration": 19.2,
+  "text": "Hola, ¿cómo están? Hoy les voy a contar tres errores que cometí al empezar. el primero fue no planificar nada. El segundo, publicar sin un objetivo claro. Y el tercero, rendirme demasiado pronto. Si te sirvió, seguime para más.",
+  "words": [
+    {
+      "word": "Hola",
+      "start": 0.42,
+      "end": 0.72
+    },
+    {
+      "word": "cómo",
+      "start": 0.92,
+      "end": 1.22
+    },
+    {
+      "word": "están",
+      "start": 1.26,
+      "end": 1.605
+    },
+    {
+      "word": "Hoy",
+      "start": 2.225,
+      "end": 2.48
+    },
+    {
+      "word": "les",
+      "start": 2.52,
+      "end": 2.775
+    },
+    {
+      "word": "voy",
+      "start": 2.815,
+      "end": 3.07
+    },
+    {
+      "word": "a",
+      "start": 3.11,
+      "end": 3.275
+    },
+    {
+      "word": "contar",
+      "start": 3.315,
+      "end": 3.705
+    },
+    {
+      "word": "tres",
+      "start": 3.745,
+      "end": 4.045
+    },
+    {
+      "word": "errores",
+      "start": 4.085,
+      "end": 4.52
+    },
+    {
+      "word": "que",
+      "start": 4.56,
+      "end": 4.815
+    },
+    {
+      "word": "cometí",
+      "start": 4.855,
+      "end": 5.245
+    },
+    {
+      "word": "al",
+      "start": 5.285,
+      "end": 5.495
+    },
+    {
+      "word": "empezar",
+      "start": 5.535,
+      "end": 5.97
+    },
+    {
+      "word": "el",
+      "start": 7,
+      "end": 7.21
+    },
+    {
+      "word": "primero",
+      "start": 7.25,
+      "end": 7.685
+    },
+    {
+      "word": "fue",
+      "start": 7.725,
+      "end": 7.98
+    },
+    {
+      "word": "no",
+      "start": 8.02,
+      "end": 8.23
+    },
+    {
+      "word": "planificar",
+      "start": 8.27,
+      "end": 8.84
+    },
+    {
+      "word": "nada",
+      "start": 8.88,
+      "end": 9.18
+    },
+    {
+      "word": "El",
+      "start": 9.8,
+      "end": 10.01
+    },
+    {
+      "word": "segundo",
+      "start": 10.05,
+      "end": 10.485
+    },
+    {
+      "word": "publicar",
+      "start": 10.685,
+      "end": 11.165
+    },
+    {
+      "word": "sin",
+      "start": 11.205,
+      "end": 11.46
+    },
+    {
+      "word": "un",
+      "start": 11.5,
+      "end": 11.71
+    },
+    {
+      "word": "objetivo",
+      "start": 11.75,
+      "end": 12.23
+    },
+    {
+      "word": "claro",
+      "start": 12.27,
+      "end": 12.615
+    },
+    {
+      "word": "Y",
+      "start": 13.235,
+      "end": 13.4
+    },
+    {
+      "word": "el",
+      "start": 13.44,
+      "end": 13.65
+    },
+    {
+      "word": "tercero",
+      "start": 13.69,
+      "end": 14.125
+    },
+    {
+      "word": "rendirme",
+      "start": 14.325,
+      "end": 14.805
+    },
+    {
+      "word": "demasiado",
+      "start": 14.845,
+      "end": 15.37
+    },
+    {
+      "word": "pronto",
+      "start": 15.41,
+      "end": 15.8
+    },
+    {
+      "word": "Si",
+      "start": 16.42,
+      "end": 16.63
+    },
+    {
+      "word": "te",
+      "start": 16.67,
+      "end": 16.88
+    },
+    {
+      "word": "sirvió",
+      "start": 16.92,
+      "end": 17.31
+    },
+    {
+      "word": "seguime",
+      "start": 17.51,
+      "end": 17.945
+    },
+    {
+      "word": "para",
+      "start": 17.985,
+      "end": 18.285
+    },
+    {
+      "word": "más",
+      "start": 18.325,
+      "end": 18.58
+    }
+  ],
+  "segments": []
+}

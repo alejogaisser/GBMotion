@@ -17,6 +17,7 @@ import { MotionPanel } from './components/MotionPanel';
 import { TextPanel } from './components/TextPanel';
 import { OutputPanel, type ExportKind, type ExportState, type PastExport } from './components/OutputPanel';
 import { GuidePanel, type GuideUpload } from './components/GuidePanel';
+import { AutoCaptionsPanel } from './components/AutoCaptionsPanel';
 import { mediaExists, mediaUrl, uploadMedia } from './utils/mediaClient';
 import { CanvasOverlay } from './components/CanvasOverlay';
 import { TimelineDock } from './components/TimelineDock';
@@ -375,6 +376,21 @@ export default function App() {
     setLayers((current) => [...current, next]);
     setActiveLayerId(next.id);
     setTool('texto');
+  };
+
+  // Los subtítulos automáticos llegan después de una espera: se leen las frases actuales, no las del clic.
+  const layersRef = useRef(layers);
+  layersRef.current = layers;
+  const applyAutoCaptions = (created: TextLayer[], mode: 'replace' | 'append') => {
+    const kept = mode === 'replace' ? layersRef.current.filter((layer) => layer.locked) : layersRef.current;
+    if (created.length === 0) return 'No se detectó voz en el video.';
+    if (kept.length + created.length > MAX_LAYERS) return `Son demasiados subtítulos (${created.length}). Subí «palabras por subtítulo» o acortá el video.`;
+    recordHistory();
+    setLayers([...kept, ...created]);
+    setActiveLayerId(created[0].id);
+    setSelectedIds([]);
+    flashHint(`${created.length} subtítulos creados. Podés deshacerlo con Ctrl+Z.`);
+    return null;
   };
 
   const importCaptions = (cues: CaptionCue[]) => {
@@ -753,6 +769,7 @@ export default function App() {
               </>
             )}
             {tool === 'video' && (
+              <>
               <GuidePanel
                 guide={guide}
                 upload={guideUpload}
@@ -762,6 +779,8 @@ export default function App() {
                 onVolume={(volume) => setGuide((current) => current ? { ...current, volume } : current)}
                 onRemove={removeGuide}
               />
+              <AutoCaptionsPanel mediaId={guideMediaId} templateLayer={activeLayer} createId={createLayerId} onApply={applyAutoCaptions} />
+              </>
             )}
             {tool === 'salida' && (
               <OutputPanel

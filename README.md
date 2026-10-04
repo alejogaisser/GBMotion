@@ -37,7 +37,9 @@ Abrir `http://127.0.0.1:4173`.
 1. Escribí la frase en **Texto**.
 2. Elegí un look en **Estilo** — la galería dibuja cada tarjeta con tu propia frase.
 3. Elegí cómo entra en **Movimiento**.
-4. Descargá en **Salida** con fondo verde y armá el timing en CapCut.
+4. Descargá en **Salida**: el video con tus subtítulos listo para publicar, o con fondo verde para componerlo en CapCut.
+
+Si preferís que la IA escriba los subtítulos, subí el video en **Video** y usá **Generar subtítulos** (ver más abajo).
 
 Los videos se descargan desde el navegador y también quedan en `exports/`.
 
@@ -72,7 +74,7 @@ Mientras trabajás, la vista previa queda fija a la izquierda al desplazarte por
 
 ## Varios textos independientes
 
-La línea de tiempo permite agregar hasta 120 frases y recuperarlas completas al abrir el proyecto. Cada texto tiene su propia frase, efecto, tipografía, color, posición, delay y palabras destacadas. También se puede ocultar, duplicar o eliminar una capa sin afectar las demás.
+La línea de tiempo permite agregar hasta 400 frases y recuperarlas completas al abrir el proyecto. Cada texto tiene su propia frase, efecto, tipografía, color, posición, delay y palabras destacadas. También se puede ocultar, duplicar o eliminar una capa sin afectar las demás.
 
 ## Línea de tiempo
 
@@ -146,6 +148,7 @@ Se guardan en `localStorage`, por lo que no requieren cuenta, red ni base de dat
 - `pnpm build`: verificación TypeScript y build de producción de la interfaz.
 - `pnpm remotion:studio`: abre la composición directamente en Remotion Studio.
 - `pnpm render:demo`: render de humo usando las props de demo.
+- `pnpm test`: todos los validadores (fuentes, motor, editor, subtítulos y servidor).
 
 ## Arquitectura
 
@@ -154,32 +157,78 @@ Se guardan en `localStorage`, por lo que no requieren cuenta, red ni base de dat
 - `src/presets`: configuraciones de presets; no contienen renderers duplicados.
 - `src/remotion`: composición multicapa compartida por Player, Studio y Renderer.
 - `src/types`: contrato tipado de animación, texto y formato.
+- `server`: servidor local dentro de Vite (subida y servicio de videos, render, transcripción, ffmpeg).
+- `src/captions`: lógica pura de subtítulos automáticos (agrupar palabras, pasarlas a frases, leer las respuestas de la IA).
 - `src/utils`: persistencia local (`storage.ts` para presets/favoritos, `project.ts` para el proyecto).
 
 Para agregar un efecto, sumá un objeto a `src/presets/builtins.ts`; para agregar un look, uno a `src/presets/styles.ts`. El motor soporta múltiples keyframes, animación por texto/palabras/letras/líneas, stagger, variaciones espaciales deterministas y propiedades 2D/3D.
 
 El renderer y el Player consumen exactamente el mismo `CompositionProps`; no existe una implementación separada para el preview.
 
-## Video de guía
+## Video
 
-**Video** permite cargar un archivo local para ver los subtítulos sobre la imagen real y, sobre todo, escuchar el audio mientras se ubican las frases.
+**Video** sube un archivo para ver los subtítulos sobre la imagen real, escuchar el audio mientras se ubican las frases, generar subtítulos con IA y exportar el resultado final.
 
-Es material de trabajo, no parte del resultado:
-
-- Vive sólo en la sesión. El `src` es un blob del navegador, así que no sobrevive a una recarga ni se guarda con el proyecto.
-- **Nunca se exporta.** `exportVideo` saca `guide` de las props antes de mandar el trabajo de render: el proceso de Remotion no puede abrir un blob de la pestaña, y el MP4 tiene que salir limpio sobre verde para componerlo en CapCut.
+- El video se sube una vez a una carpeta local (ver «Dónde se guardan los videos»). El panel muestra «Subiendo… N%» y después «Video guardado».
+- **Sobrevive a una recarga:** el proyecto recuerda el video guardado y lo vuelve a conectar solo.
+- El `src` del preview es un blob de la pestaña hasta que se recarga; el render nunca recibe blobs. Para exportar con el video adentro, el servidor arma la URL a partir del id del video (`mediaId`).
 - La línea de tiempo se estira para cubrir todo el video, aunque los subtítulos terminen antes.
-- El video se recorta con `object-fit: cover` para llenar el formato elegido, igual que va a pasar en el editor.
+- El video se recorta con `object-fit: cover` para llenar el formato elegido, igual que en la exportación.
 
 ## Exportación
 
-- **Descargar MP4**: H.264 con el fondo elegido.
-- **Video con fondo verde**: MP4 con fondo `#00ff00` para chroma key en CapCut. Camino recomendado y estable.
-- **Transparencia (beta)**, sólo en modo avanzado: ProRes 4444 `.mov` con canal alpha real. Los archivos son grandes; usalo sólo si tu editor importa ProRes con alpha.
+En **Exportar** hay dos caminos:
+
+- **Video con tus subtítulos**: tu video con los subtítulos quemados y el audio original (MP4 H.264, el formato elegido recortado para llenar, a 30 fps). Necesita un video guardado en **Video**; el volumen del audio original se regula ahí mismo. Sale como `gb-motion-burn-<fecha>.mp4`.
+- **Video con fondo verde**: sólo los subtítulos sobre `#00ff00` y sin audio, para quitar el verde con chroma en CapCut. Sale como `gb-motion-green-<fecha>.mp4`.
+- **MP4 con el fondo elegido**: H.264 con el fondo que hayas puesto.
+- **Transparencia (beta)**, sólo en ajustes finos: ProRes 4444 `.mov` con canal alpha real. Los archivos son grandes; usalo sólo si tu editor importa ProRes con alpha.
+
+Los videos se descargan desde el navegador y también quedan en `exports/`. Se renderiza un video a la vez: si pedís otro mientras hay uno en proceso, GB Motion avisa («Ya hay un video en proceso»).
 
 El render corre como un trabajo: `POST /api/render` devuelve un `jobId` y la interfaz hace *polling* de `GET /api/render/:id`, mostrando una barra de progreso real y un botón **Cancelar** (`DELETE /api/render/:id`). `GET /api/exports` lista los últimos videos; el enlace **Videos anteriores** abre esa lista. El checkerboard es sólo ayuda visual del preview y se exporta sobre negro.
 
-El servidor de export es de desarrollo (`pnpm dev`). Si Vite se reinicia durante un render —por ejemplo al editar `vite.config.ts`— ese render se pierde y la interfaz muestra un error controlado.
+La API local sólo acepta pedidos de la propia app (`Origin` ausente o `http://127.0.0.1:4173` / `http://localhost:4173`); cualquier otra web recibe 403. Los tamaños aceptados son los tres de la app (1080×1920, 1920×1080, 1080×1080).
+
+El servidor es el de desarrollo (`pnpm dev`). Si Vite se reinicia durante un render o una transcripción —por ejemplo al editar `vite.config.ts` o `.env.local`— ese trabajo se pierde y la interfaz muestra un error controlado.
+
+## Configuración de la IA (`.env.local`)
+
+Los subtítulos automáticos usan un servicio de transcripción. Las claves se leen sólo del lado del servidor local y nunca llegan al navegador ni a `dist/`.
+
+1. Copiá `.env.example` como `.env.local` (en la carpeta raíz del proyecto, al lado de `package.json`).
+2. Agregá la clave que tengas, sin comillas:
+
+   ```
+   ELEVENLABS_API_KEY=tu_clave
+   GROQ_API_KEY=tu_clave
+   ```
+
+   - **ElevenLabs Scribe v2** (recomendado): es el que mejor entiende español y marca el tiempo de cada palabra. Cuesta unos centavos por minuto de audio.
+   - **Groq Whisper large-v3** (alternativa): tiene un plan gratuito con tope de 25 MB de audio.
+   - Con las dos claves podés elegir el servicio en el panel; `GB_TRANSCRIBE_PROVIDER=elevenlabs` o `groq` fija el predeterminado.
+3. **Reiniciá GB Motion** (cerrá la ventana oculta de Node o volvé a abrir `INICIAR_GB_MOTION.cmd`) cada vez que edites `.env.local`: el servidor lee el archivo una sola vez al arrancar.
+
+Para probar todo sin gastar, poné `GB_TRANSCRIBE_MOCK=1`: usa una transcripción de ejemplo (`scripts/fixtures/elevenlabs-es.json`) en vez de llamar a la IA.
+
+### Dónde se guardan los videos
+
+Al subir un video en **Video**, GB Motion guarda una copia en `%LOCALAPPDATA%\gb-motion\media` (fuera de OneDrive, para no sincronizar archivos pesados). Se cambia con `GB_MEDIA_DIR` en `.env.local`. Ahí también quedan las transcripciones ya hechas (`<id>.<servicio>.<idioma>.json`), así que volver a generar los subtítulos del mismo video no vuelve a cobrar.
+
+**«Quitar el video» no borra esa copia:** la limpieza de la carpeta es manual.
+
+## Generar subtítulos
+
+1. En **Video**, subí tu video. Esperá a que diga «Video guardado».
+2. En **Subtítulos automáticos** elegí el idioma, cuántas palabras por subtítulo (3 es lo habitual en reels), si querés cortar en pausas y quitar muletillas (eh, mm).
+3. Elegí el **resaltado** de la palabra que se dice: color de letra, caja, karaoke (las dichas quedan de color), aparecen al decirse, o crece la palabra activa.
+4. Con «Usar el look de la frase seleccionada» los subtítulos heredan el estilo y los efectos de la frase que tengas elegida; si no, usan el look de fábrica.
+5. **Reemplazar** borra las frases actuales (conserva las bloqueadas); **Agregar** suma las nuevas. Todo se deshace con un solo `Ctrl+Z`.
+6. **Generar subtítulos**. Cada subtítulo es una frase normal del proyecto: se puede retocar, mover, cambiar de estilo o corregir. Al corregir el texto de una frase se conservan los tiempos de las palabras que no tocaste.
+
+Se aceptan hasta 400 frases por proyecto. Si el video da más, subí «Palabras por subtítulo» o acortalo.
+
+El audio se envía al servicio de transcripción; el video nunca sale de tu computadora. Si cancelás después de enviar el audio, el servicio igual puede cobrarlo.
 
 ## Estado de las fases
 

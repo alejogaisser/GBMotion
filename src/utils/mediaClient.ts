@@ -1,3 +1,5 @@
+import type { TimedWord, TranscribeLanguage, TranscribeProviderId } from '../captions/types';
+
 export type MediaInfo = {
   mediaId: string;
   name: string;
@@ -38,3 +40,60 @@ export const mediaExists = async (mediaId: string): Promise<boolean> => {
 };
 
 export const mediaUrl = (mediaId: string) => `/media/${mediaId}`;
+
+/* ---------------------------------------------------------------------------
+ * Subtítulos automáticos: el servidor local hace el trabajo (extrae el audio,
+ * llama a la IA con la clave que sólo él conoce) y acá se consulta el avance.
+ * ------------------------------------------------------------------------- */
+
+export type ProviderInfo = { id: TranscribeProviderId; label: string; configured: boolean };
+export type TranscribeStage = 'extracting' | 'uploading' | 'transcribing' | 'done' | 'error';
+
+export class TranscribeError extends Error {
+  code?: string;
+  constructor(message: string, code?: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export const fetchProviders = async (): Promise<ProviderInfo[]> => {
+  try {
+    const payload = await (await fetch('/api/transcribe/providers')).json() as { providers?: ProviderInfo[] };
+    return Array.isArray(payload.providers) ? payload.providers : [];
+  } catch { return []; }
+};
+
+export const startTranscription = async (input: { mediaId: string; language: TranscribeLanguage; provider?: TranscribeProviderId }): Promise<string> => {
+  let response: Response;
+  try {
+    response = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
+  } catch { throw new TranscribeError('No pude conectar con GB Motion. Revisá que siga abierto.'); }
+  const payload = await response.json().catch(() => ({})) as { jobId?: string; error?: string; code?: string };
+  if (!response.ok || !payload.jobId) throw new TranscribeError(payload.error ?? 'No pude iniciar la transcripción.', payload.code);
+  return payload.jobId;
+};
+
+export const cancelTranscription = async (jobId: string) => {
+  try { await fetch(`/api/transcribe/${jobId}`, { method: 'DELETE' }); } catch { /* ya se canceló del lado de la pantalla */ }
+};
+
+/** Consulta el trabajo hasta que termina. Devuelve las palabras con tiempos. */
+export const pollTranscription = async (jobId: string, onStage: (stage: TranscribeStage) => void, signal: AbortSignal): Promise<TimedWord[]> => {
+  for (;;) {
+    await new Promise((done) => setTimeout(done, 700));
+    if (signal.aborted) throw new TranscribeError('Cancelado.', 'cancelled');
+    let job: { status: string; stage: TranscribeStage; error?: string; words?: TimedWord[] };
+    try {
+      const response = await fetch(`/api/transcribe/${jobId}`);
+      if (response.status === 404) throw new TranscribeError('GB Motion se reinició mientras transcribía. Volvé a intentar.');
+      job = await response.json();
+    } catch (error) {
+      throw error instanceof TranscribeError ? error : new TranscribeError('Se perdió la conexión con GB Motion.');
+    }
+    if (job.status === 'running') { onStage(job.stage); continue; }
+    if (job.status === 'done' && Array.isArray(job.words)) return job.words;
+    if (job.status === 'cancelled') throw new TranscribeError('Cancelado.', 'cancelled');
+    throw new TranscribeError(job.error ?? 'No pude generar los subtítulos. Si reiniciaste GB Motion, volvé a intentar.');
+  }
+};

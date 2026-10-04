@@ -10,7 +10,8 @@ import { tokensForMode } from '../utils/textSegmentation';
 import { calculateTextLayout } from '../engine/textLayout';
 import { getLayerDuration } from '../utils/duration';
 import { normalizeTypography, paintBoxCss, paintCss, scalePaint, secondaryCss } from '../engine/textPaint';
-import { activeWord, sampleTransform } from '../engine/editorMotion';
+import { sampleTransform } from '../engine/editorMotion';
+import { wordHighlightCss } from '../engine/wordHighlight';
 import { revealClip } from '../engine/reveal';
 import { ReadableEffect } from './ReadableEffect';
 import { isReadableEffect } from '../engine/readableEffects';
@@ -33,11 +34,12 @@ const keywordCss = (style: KeywordStyle | undefined, font: FontDefinition): Reac
   fontWeight: closestFontWeight(font, style.fontWeight)
 } : {};
 
-const richText = (text: string, keywords: Record<number, KeywordStyle>, font: FontDefinition, activeIndex = -1, activeCss: React.CSSProperties = {}) => {
+const richText = (text: string, styleFor: (wordIndex: number, isSpace: boolean) => React.CSSProperties) => {
   let index = -1;
   return text.split(/(\s+)/).map((part, partIndex) => {
-    if (!/^\s+$/.test(part)) index += 1;
-    return <span key={`${partIndex}-${part}`} style={{ ...keywordCss(keywords[index], font), ...(index === activeIndex && !/^\s+$/.test(part) ? activeCss : {}) }}>{part}</span>;
+    const isSpace = /^\s+$/.test(part);
+    if (!isSpace) index += 1;
+    return <span key={`${partIndex}-${part}`} style={styleFor(index, isSpace)}>{part}</span>;
   });
 };
 
@@ -134,10 +136,6 @@ const AnimatedTextLayer = ({ layer }: { layer: TextLayer }) => {
   const { width, height, fps } = useVideoConfig();
   const phase = getAnimationPhase(layer, frame);
   const transform = sampleTransform(layer.transformKeys, frame);
-  const activeIndex = activeWord(layer.wordTiming, frame);
-  const activeCss: React.CSSProperties = !layer.wordTiming ? {} : layer.wordTiming.mode === 'box'
-    ? { backgroundColor: layer.wordTiming.color, color: '#111111', WebkitTextFillColor: '#111111', borderRadius: '0.12em' }
-    : { color: layer.wordTiming.color, WebkitTextFillColor: layer.wordTiming.color };
   // resolvePreset is pure over (preset, overrides); those refs only change when the
   // layer's animation is edited, so don't rebuild it on every rendered frame.
   const segmentPreset = phase.segment?.preset ?? null;
@@ -163,6 +161,15 @@ const AnimatedTextLayer = ({ layer }: { layer: TextLayer }) => {
   const readable = isReadableEffect(preset) && !paint.secondary && mode !== 'text';
   const units = rawUnits;
   const boxCss = paintBoxCss(paint);
+  const timing = layer.wordTiming;
+  const highlight = (index: number): React.CSSProperties => (timing && index >= 0 ? wordHighlightCss(timing, index, frame, paint) : {});
+  /** Palabra clave + resaltado. En «scale» manda la palabra clave, porque el resaltado trae su propia pintura. */
+  const wordStyle = (index: number, isSpace = false): React.CSSProperties => {
+    const keyword = keywordCss(layer.keywords[index], selectedFont);
+    if (isSpace) return keyword;
+    const light = highlight(index);
+    return timing?.mode === 'scale' ? { ...light, ...keyword } : { ...keyword, ...light };
+  };
   const loop = animationForLayer(layer).loop ?? null;
 
   /**
@@ -204,13 +211,13 @@ const AnimatedTextLayer = ({ layer }: { layer: TextLayer }) => {
       }}>
         {readable && preset ? <ReadableEffect text={layer.text} preset={preset} frameForUnit={frameForUnit} opacityForUnit={opacityForUnit}
           width={layout.maxWidth} height={layout.maxHeight} measurementKey={JSON.stringify([layer.typography, layer.keywords, layout.fontSize])}
-          wrap={withLoop} wordStyle={(index) => ({ ...paintCss(paint), ...boxCss, ...keywordCss(layer.keywords[index], selectedFont), ...(index === activeIndex ? activeCss : {}) })}
+          wrap={withLoop} wordStyle={(index) => ({ ...paintCss(paint), ...boxCss, ...wordStyle(index) })}
         /> : !preset || mode === 'text' ? (
           withLoop(
           <div style={preset ? motionCss(preset, frameForUnit(0), layer.typography.letterSpacing, opacityForUnit(0)) : undefined}>
             {/* En línea a propósito: con box-decoration-break: clone la caja se
                 repite por renglón en vez de envolver el bloque entero. */}
-            <span style={{ ...paintCss(paint), ...boxCss }}>{richText(layer.text, layer.keywords, selectedFont, activeIndex, activeCss)}</span>
+            <span style={{ ...paintCss(paint), ...boxCss }}>{richText(layer.text, wordStyle)}</span>
           </div>, 0, 'loop-text')
         ) : units.map((unit) => {
           if (!unit.animate) return <span key={`space-${unit.animationIndex}-${unit.content}`} style={{ ...paintCss(paint), whiteSpace: 'pre-wrap' }}>{unit.content}</span>;
@@ -225,13 +232,12 @@ const AnimatedTextLayer = ({ layer }: { layer: TextLayer }) => {
               <span style={{
                 ...paintCss(paint),
                 ...(paint.secondary && unit.animationIndex > 0 ? secondaryCss(paint.secondary, paintScale) : {}),
-                ...keywordCss(unit.wordIndex === undefined ? undefined : layer.keywords[unit.wordIndex], selectedFont),
                 ...boxCss,
-                ...(unit.wordIndex === activeIndex ? activeCss : {}),
+                ...(unit.wordIndex === undefined ? {} : wordStyle(unit.wordIndex)),
                 display: 'inline-block',
                 whiteSpace: mode === 'words' ? 'nowrap' : 'pre-wrap',
                 overflowWrap: mode === 'words' ? 'normal' : undefined,
-              }}>{mode === 'lines' && layer.wordTiming ? richText(unit.content, {}, selectedFont, activeIndex - units.filter((u) => u.animationIndex < unit.animationIndex).reduce((n, u) => n + (u.content.match(/\S+/g)?.length ?? 0), 0), activeCss) : unit.content}</span>
+              }}>{mode === 'lines' && layer.wordTiming ? richText(unit.content, (index, isSpace) => isSpace ? {} : highlight(index + units.filter((u) => u.animationIndex < unit.animationIndex).reduce((n, u) => n + (u.content.match(/\S+/g)?.length ?? 0), 0))) : unit.content}</span>
             </span>
           );
           const cursor = unit.animationIndex === cursorIndex ? (

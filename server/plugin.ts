@@ -4,6 +4,7 @@ import type { Plugin } from 'vite';
 import { HttpError, isAllowedOrigin, json, readJson } from './http.ts';
 import { handleMedia } from './media.ts';
 import { createRenderService } from './render.ts';
+import { createTranscribeService } from './transcribe.ts';
 
 export type GbServerOptions = {
   elevenlabsKey?: string;
@@ -20,6 +21,8 @@ export const gbMotionPlugin = (options: GbServerOptions): Plugin => ({
     const srcDir = resolve(projectRoot, 'src');
     const port = server.config.server.port ?? 4173;
     const render = createRenderService({ projectRoot, exportsDir: resolve(projectRoot, 'exports'), mediaDir: options.mediaDir, port });
+
+    const transcribe = createTranscribeService(options);
 
     const invalidateBundle = (file: string) => { if (file.includes(srcDir)) render.invalidateBundle(); };
     server.watcher.on('change', invalidateBundle);
@@ -60,6 +63,24 @@ export const gbMotionPlugin = (options: GbServerOptions): Plugin => ({
           return json(response, 200, { status: 'cancelled' });
         }
 
+        if (method === 'GET' && path === '/api/transcribe/providers') return json(response, 200, transcribe.listProviders());
+
+        if (method === 'GET' && path.startsWith('/api/transcribe/')) {
+          const job = transcribe.status(path.slice('/api/transcribe/'.length));
+          if (!job) return json(response, 404, { error: 'No existe ese trabajo de transcripción' });
+          return json(response, 200, job);
+        }
+
+        if (method === 'DELETE' && path.startsWith('/api/transcribe/')) {
+          transcribe.cancel(path.slice('/api/transcribe/'.length));
+          return json(response, 200, { status: 'cancelled' });
+        }
+
+        if (method === 'POST' && path === '/api/transcribe') {
+          const jobId = await transcribe.start(await readJson(request, 64 * 1024));
+          return json(response, 202, { jobId });
+        }
+
         if (method === 'POST' && path === '/api/render') {
           const jobId = await render.start(await readJson(request));
           return json(response, 202, { jobId });
@@ -67,7 +88,8 @@ export const gbMotionPlugin = (options: GbServerOptions): Plugin => ({
       } catch (error) {
         if (response.headersSent) return;
         if (error instanceof HttpError) return json(response, error.status, { error: error.message, ...(error.code ? { code: error.code } : {}) });
-        return json(response, 500, { error: error instanceof Error ? error.message : 'Algo salió mal en el servidor local.' });
+        // Mensaje fijo: el texto de un error inesperado podría arrastrar datos que no deben salir.
+        return json(response, 500, { error: 'Algo salió mal en el servidor local.' });
       }
       return next();
     });
