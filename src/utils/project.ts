@@ -1,4 +1,4 @@
-import type { BackgroundMode, LayerAnimation, MotionPreset, TextLayer } from '../types/motion';
+import type { BackgroundMode, LayerAnimation, MotionPreset, TextLayer, WordHighlightMode } from '../types/motion';
 import { createTextLayer, formats, overridesFor } from '../remotion/defaults';
 import { builtInPresets, defaultPreset } from '../presets/builtins';
 import { isMotionPreset } from '../engine/validation';
@@ -9,6 +9,8 @@ export type ProjectState = {
   version: number;
   name?: string;
   guideName?: string;
+  /** Id del video guardado en el servidor local; permite re-vincularlo al recargar. */
+  guideMediaId?: string;
   layers: TextLayer[];
   background: BackgroundMode;
   customBackground: string;
@@ -19,6 +21,8 @@ export type ProjectState = {
 const PROJECT_KEY = 'gb-motion:project';
 const PROJECT_VERSION = 1;
 const BACKGROUND_MODES: BackgroundMode[] = ['black', 'white', 'green', 'checker', 'custom', 'transparent'];
+const WORD_MODES: WordHighlightMode[] = ['color', 'box', 'karaoke', 'reveal', 'scale'];
+const MEDIA_ID = /^[0-9a-f-]{36}\.[a-z0-9]{2,4}$/;
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -50,8 +54,8 @@ const sanitizeLayer = (raw: unknown, index: number): TextLayer => {
   return {
     ...template,
     transformKeys: Array.isArray(source.transformKeys) ? source.transformKeys.filter((k): k is NonNullable<TextLayer['transformKeys']>[number] => record(k) && ['frame','x','y','scale','rotation','opacity'].every((key) => typeof k[key] === 'number' && Number.isFinite(k[key])) && Number(k.frame) >= 0 && Number(k.scale) > 0 && ['linear','smooth'].includes(String(k.easing))).slice(0, 300) : undefined,
-    wordTiming: record(source.wordTiming) && ['color','box'].includes(String(source.wordTiming.mode)) && HEX.test(String(source.wordTiming.color)) && Array.isArray(source.wordTiming.words)
-      ? { mode: source.wordTiming.mode as 'color' | 'box', color: String(source.wordTiming.color), words: source.wordTiming.words.filter((w): w is { word: string; start: number; end: number } => record(w) && typeof w.word === 'string' && typeof w.start === 'number' && Number.isFinite(w.start) && w.start >= 0 && typeof w.end === 'number' && Number.isFinite(w.end) && w.end > w.start).slice(0, 180) } : undefined,
+    wordTiming: record(source.wordTiming) && WORD_MODES.includes(source.wordTiming.mode as WordHighlightMode) && HEX.test(String(source.wordTiming.color)) && Array.isArray(source.wordTiming.words)
+      ? { mode: source.wordTiming.mode as WordHighlightMode, color: String(source.wordTiming.color), words: source.wordTiming.words.filter((w): w is { word: string; start: number; end: number } => record(w) && typeof w.word === 'string' && typeof w.start === 'number' && Number.isFinite(w.start) && w.start >= 0 && typeof w.end === 'number' && Number.isFinite(w.end) && w.end > w.start).slice(0, 180) } : undefined,
     id: str(source.id, template.id),
     name: str(source.name, template.name),
     text: str(source.text, template.text),
@@ -89,6 +93,7 @@ export const sanitizeProject = (value: unknown): ProjectState | null => {
     version: PROJECT_VERSION,
     name: str(value.name, 'Mi proyecto').slice(0, 80),
     guideName: str(value.guideName, '').slice(0, 255),
+    guideMediaId: typeof value.guideMediaId === 'string' && MEDIA_ID.test(value.guideMediaId) ? value.guideMediaId : undefined,
     layers,
     background,
     customBackground: HEX.test(String(value.customBackground)) ? String(value.customBackground) : '#131722',

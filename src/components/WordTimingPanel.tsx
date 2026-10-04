@@ -11,7 +11,7 @@ export function WordTimingPanel({ layer, frame, onChange, onSeek }: { layer: Tex
     <p className="hint">El color o la caja siguen los tiempos que fijes. La distribución inicial es una guía uniforme; escuchá el audio para ajustarla.</p>
     <button className="ghost-button" disabled={layer.locked || !layer.text.trim() || duration < (layer.text.match(/\S+/g)?.length ?? 0)} onClick={() => onChange(evenWordTiming(layer.text, duration))}>{timing ? 'Redistribuir tiempos' : 'Preparar palabras'}</button>
     {timing && <>
-      <div className="control-row"><select aria-label="Tipo de resaltado por palabra" value={timing.mode} disabled={layer.locked} onChange={(e) => onChange({ ...timing, mode: e.target.value as WordTiming['mode'] })}><option value="color">Color de letra</option><option value="box">Caja de color</option></select>
+      <div className="control-row"><select aria-label="Tipo de resaltado por palabra" value={timing.mode} disabled={layer.locked} onChange={(e) => onChange({ ...timing, mode: e.target.value as WordTiming['mode'] })}><option value="color">Color de letra</option><option value="box">Caja de color</option><option value="karaoke">Karaoke (las dichas quedan de color)</option><option value="reveal">Aparecen al decirse</option><option value="scale">Crece la palabra activa</option></select>
         <input aria-label="Color de la palabra activa" type="color" value={timing.color} disabled={layer.locked} onChange={(e) => onChange({ ...timing, color: e.target.value })} />
       </div>
       <div className="word-timing-table">{timing.words.map((word, index) => <div className={index === active ? 'active' : ''} key={index}>

@@ -16,7 +16,8 @@ import { StyleTuner } from './components/StyleTuner';
 import { MotionPanel } from './components/MotionPanel';
 import { TextPanel } from './components/TextPanel';
 import { OutputPanel, type ExportKind, type ExportState, type PastExport } from './components/OutputPanel';
-import { GuidePanel } from './components/GuidePanel';
+import { GuidePanel, type GuideUpload } from './components/GuidePanel';
+import { mediaExists, mediaUrl, uploadMedia } from './utils/mediaClient';
 import { CanvasOverlay } from './components/CanvasOverlay';
 import { TimelineDock } from './components/TimelineDock';
 import { SavePresetModal, type SavePresetKind } from './components/SavePresetModal';
@@ -48,7 +49,7 @@ const panelTitles: Record<Tool, { title: string; hint: string }> = {
   estilo: { title: 'Estilo del subtítulo', hint: 'Elegí un look. Se aplica a la frase seleccionada.' },
   movimiento: { title: 'Efectos', hint: 'Cómo aparece, cuánto se queda y cómo se va.' },
   texto: { title: 'Texto', hint: 'Qué dice, con qué letra y dónde se ubica.' },
-  video: { title: 'Video de guía', hint: 'Sólo para trabajar. No se exporta con el subtítulo.' },
+  video: { title: 'Video', hint: 'Subilo una vez: queda guardado para calzar y exportar tus subtítulos.' },
   salida: { title: 'Salida', hint: 'Formato, fondo y descarga del video.' },
 };
 
@@ -71,6 +72,10 @@ export default function App() {
   const [favorites, setFavorites] = useState<string[]>(loadFavorites);
   const [tool, setTool] = useState<Tool>('texto');
   const [guide, setGuide] = useState<VideoGuide | null>(null);
+  const [guideMediaId, setGuideMediaId] = useState(() => restored?.guideMediaId ?? '');
+  const [guideUpload, setGuideUpload] = useState<GuideUpload>({ status: 'idle', progress: 0 });
+  const uploadToken = useRef(0);
+  const [exportVolume, setExportVolume] = useState(1);
 
   const layerClipboard = useRef<TextLayer | null>(null);
 
@@ -122,45 +127,90 @@ export default function App() {
   };
 
   /** Lee la duración real del archivo antes de mostrarlo, para dimensionar la línea de tiempo. */
-  const pickGuide = async (file: File) => {
-    const src = URL.createObjectURL(file);
+  const readDuration = async (src: string) => {
     const probe = document.createElement('video');
     try {
-      const seconds = await new Promise<number>((resolve, reject) => {
+      return await new Promise<number>((resolve, reject) => {
         probe.preload = 'metadata';
         probe.onloadedmetadata = () => resolve(probe.duration);
         probe.onerror = () => reject(new Error('formato no soportado'));
         probe.src = src;
       });
+    } finally {
+      // Sin esto el elemento de prueba sigue sosteniendo el archivo.
+      probe.removeAttribute('src');
+      probe.load();
+    }
+  };
+  const revokeBlob = (src: string) => { if (src.startsWith('blob:')) URL.revokeObjectURL(src); };
+
+  const pickGuide = async (file: File) => {
+    const src = URL.createObjectURL(file);
+    try {
+      const seconds = await readDuration(src);
       if (!Number.isFinite(seconds) || seconds <= 0) throw new Error('duración desconocida');
       setGuideName(file.name);
       setGuide((current) => {
-        if (current) URL.revokeObjectURL(current.src);
+        if (current) revokeBlob(current.src);
         return { src, name: file.name, durationInFrames: Math.round(seconds * 30), volume: 1 };
       });
+      // El video se guarda en el servidor local para que sobreviva a una recarga y
+      // para poder exportarlo con los subtítulos adentro.
+      const token = ++uploadToken.current;
+      setGuideMediaId('');
+      setGuideUpload({ status: 'uploading', progress: 0 });
+      uploadMedia(file, (progress) => { if (uploadToken.current === token) setGuideUpload({ status: 'uploading', progress }); })
+        .then((info) => {
+          if (uploadToken.current !== token) return;
+          setGuide((current) => current?.src === src ? { ...current, mediaId: info.mediaId } : current);
+          setGuideMediaId(info.mediaId);
+          setGuideUpload({ status: 'idle', progress: 1 });
+          flashHint('Video guardado.');
+        })
+        .catch((error: unknown) => {
+          if (uploadToken.current !== token) return;
+          setGuideUpload({ status: 'error', progress: 0 });
+          flashHint(error instanceof Error ? error.message : 'No pude guardar el video.');
+        });
       flashHint('Video cargado. Preparando la forma de onda…');
       if (file.size <= 150_000_000) void readWaveform(file).then((waveform) => setGuide((current) => current?.src === src ? { ...current, waveform } : current)).catch(() => flashHint('Video listo. No se pudo leer la forma de onda; podés sincronizar escuchando el audio.'));
       else flashHint('Video listo. La forma de onda se omite en archivos mayores de 150 MB.');
     } catch {
       URL.revokeObjectURL(src);
       flashHint('No pude leer ese video. Probá con un MP4.');
-    } finally {
-      probe.removeAttribute('src');
-      probe.load();
     }
   };
 
-  const removeGuide = () => { setGuideName(''); setGuide((current) => {
-    if (current) URL.revokeObjectURL(current.src);
-    return null;
-  }); };
+  const removeGuide = () => {
+    uploadToken.current++;
+    setGuideName(''); setGuideMediaId(''); setGuideUpload({ status: 'idle', progress: 0 });
+    setGuide((current) => {
+      if (current) revokeBlob(current.src);
+      return null;
+    });
+  };
+
+  /** Vuelve a conectar un video ya subido (después de recargar o de abrir un proyecto). */
+  const relinkGuide = async (mediaId: string, name: string) => {
+    setGuideMediaId(mediaId);
+    if (!(await mediaExists(mediaId))) { setGuideMediaId((current) => current === mediaId ? '' : current); return; }
+    const src = mediaUrl(mediaId);
+    try {
+      const seconds = await readDuration(src);
+      if (!Number.isFinite(seconds) || seconds <= 0) throw new Error('duración desconocida');
+      setGuide((current) => current ?? { src, name: name || 'video', durationInFrames: Math.round(seconds * 30), volume: 1, mediaId });
+    } catch {
+      setGuideMediaId((current) => current === mediaId ? '' : current);
+    }
+  };
+  useEffect(() => { if (restored?.guideMediaId) void relinkGuide(restored.guideMediaId, restored.guideName ?? ''); }, []);
 
   // El blob se libera sólo al desmontar. Con `guide` como dependencia, cualquier
   // cambio de volumen dispararía la limpieza y revocaría la URL que el video
   // sigue usando.
   const guideRef = useRef<VideoGuide | null>(null);
   guideRef.current = guide;
-  useEffect(() => () => { if (guideRef.current) URL.revokeObjectURL(guideRef.current.src); }, []);
+  useEffect(() => () => { if (guideRef.current) revokeBlob(guideRef.current.src); }, []);
 
   const presets = useMemo(() => [...builtInPresets, ...customPresets], [customPresets]);
   const stylePresets = useMemo(() => [...builtInStylePresets, ...customStylePresets], [customStylePresets]);
@@ -186,12 +236,12 @@ export default function App() {
     clearTimeout(projectSaveTimer.current);
     setProjectSaved(false);
     projectSaveTimer.current = setTimeout(() => {
-      setProjectSaved(saveProject({ layers, background, customBackground, formatId, activeLayerId, name: projectName, guideName }) ? true : null);
+      setProjectSaved(saveProject({ layers, background, customBackground, formatId, activeLayerId, name: projectName, guideName, guideMediaId: guideMediaId || undefined }) ? true : null);
     }, 600);
     return () => clearTimeout(projectSaveTimer.current);
-  }, [layers, background, customBackground, formatId, activeLayerId, projectName, guideName]);
-  const latestProject = useRef({ ...snapshot, activeLayerId, guideName });
-  latestProject.current = { ...snapshot, activeLayerId, guideName };
+  }, [layers, background, customBackground, formatId, activeLayerId, projectName, guideName, guideMediaId]);
+  const latestProject = useRef({ ...snapshot, activeLayerId, guideName, guideMediaId: guideMediaId || undefined });
+  latestProject.current = { ...snapshot, activeLayerId, guideName, guideMediaId: guideMediaId || undefined };
   useEffect(() => {
     const flush = () => saveProject(latestProject.current);
     const visibility = () => { if (document.visibilityState === 'hidden') flush(); };
@@ -291,7 +341,7 @@ export default function App() {
   };
 
   const downloadProject = () => {
-    const blob = new Blob([serializeProject({ layers, background, customBackground, formatId, activeLayerId, name: projectName, guideName })], { type: 'application/json' });
+    const blob = new Blob([serializeProject({ layers, background, customBackground, formatId, activeLayerId, name: projectName, guideName, guideMediaId: guideMediaId || undefined })], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
@@ -305,6 +355,7 @@ export default function App() {
     if (!parsed) { flashHint('Ese archivo no es un proyecto de GB Motion.'); return; }
     applyProjectState(parsed.layers, parsed.activeLayerId, parsed.background, parsed.customBackground, parsed.formatId, parsed.name);
     setGuideName(parsed.guideName ?? '');
+    if (parsed.guideMediaId) void relinkGuide(parsed.guideMediaId, parsed.guideName ?? '');
     flashHint('Proyecto abierto.');
   };
 
@@ -468,6 +519,7 @@ export default function App() {
 
   const exportVideo = async (kind: ExportKind) => {
     if (exportJobId.current) return;
+    if (kind === 'burn' && !guideMediaId) { setExportState({ status: 'error', message: 'Subí un video en «Video» para exportarlo con subtítulos.' }); return; }
       const requestId = `starting-${Date.now()}`;
       let ownedJobId = requestId;
     exportJobId.current = requestId;
@@ -478,10 +530,12 @@ export default function App() {
       // que el proceso de render no puede abrir, y el MP4 tiene que salir
       // limpio para componerlo en CapCut.
       const { guide: _guide, ...exportProps } = inputProps;
+      // Para «Video con tus subtítulos» el servidor arma la URL del video a partir del id.
+      const media = kind === 'burn' ? { mediaId: guideMediaId, name: guide?.name, volume: exportVolume } : undefined;
       const response = await fetch('/api/render', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ props: { ...exportProps, background: exportBackground }, format, kind }),
+        body: JSON.stringify({ props: { ...exportProps, background: exportBackground }, format, kind, media }),
       });
       const started = await response.json() as { jobId?: string; error?: string };
       if (!response.ok || !started.jobId) throw new Error(started.error ?? 'No se pudo iniciar el video');
@@ -701,6 +755,7 @@ export default function App() {
             {tool === 'video' && (
               <GuidePanel
                 guide={guide}
+                upload={guideUpload}
                 expectedName={guideName}
                 formatLabel={format.label}
                 onPick={(file) => void pickGuide(file)}
@@ -717,6 +772,9 @@ export default function App() {
                 exportState={exportState}
                 pastExports={pastExports}
                 advanced={advanced}
+                hasMedia={Boolean(guideMediaId)}
+                audioVolume={exportVolume}
+                onAudioVolume={setExportVolume}
                 onFormat={setFormatId}
                 onBackground={setBackground}
                 onCustomBackground={setCustomBackground}
@@ -749,8 +807,8 @@ export default function App() {
         onToggleLock={(id) => updateLayer(id, (layer) => ({ ...layer, locked: !layer.locked }))}
       />
 
-      {libraryOpen && <LibraryPanel project={{ ...snapshot, activeLayerId, guideName }} layer={activeLayer} onClose={() => setLibraryOpen(false)}
-        onOpen={(p) => { const parsed = parseProjectFile(JSON.stringify(p)); if (!parsed) { flashHint('El proyecto guardado no es válido.'); return; } applyProjectState(parsed.layers, parsed.activeLayerId, parsed.background, parsed.customBackground, parsed.formatId, parsed.name); setGuideName(parsed.guideName ?? ''); }}
+      {libraryOpen && <LibraryPanel project={{ ...snapshot, activeLayerId, guideName, guideMediaId: guideMediaId || undefined }} layer={activeLayer} onClose={() => setLibraryOpen(false)}
+        onOpen={(p) => { const parsed = parseProjectFile(JSON.stringify(p)); if (!parsed) { flashHint('El proyecto guardado no es válido.'); return; } applyProjectState(parsed.layers, parsed.activeLayerId, parsed.background, parsed.customBackground, parsed.formatId, parsed.name); setGuideName(parsed.guideName ?? ''); if (parsed.guideMediaId) void relinkGuide(parsed.guideMediaId, parsed.guideName ?? ''); }}
         onKit={(kit) => updateActive((l) => ({ ...l, typography: structuredClone(kit.typography), animation: cloneAnimation(kit.animation), preset: kit.animation.in?.preset ?? l.preset, overrides: kit.animation.in?.overrides ?? l.overrides }))} />}
       {saveKind && (
         <SavePresetModal

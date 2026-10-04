@@ -1,12 +1,8 @@
 import { defaultPreset } from '../presets/builtins';
-import type { CompositionProps, MotionOverrides, MotionPreset, TextLayer, TypographySettings, VideoFormat } from '../types/motion';
+import { videoFormats, type CompositionProps, type MotionOverrides, type MotionPreset, type TextLayer, type TypographySettings, type VideoFormat } from '../types/motion';
 import { fontById, fontStack } from '../typography/fontRegistry';
 
-export const formats: VideoFormat[] = [
-  { id: 'portrait', label: '1080 × 1920 · 9:16', width: 1080, height: 1920 },
-  { id: 'landscape', label: '1920 × 1080 · 16:9', width: 1920, height: 1080 },
-  { id: 'square', label: '1080 × 1080 · 1:1', width: 1080, height: 1080 }
-];
+export const formats: VideoFormat[] = videoFormats;
 
 /**
  * El look con el que arranca la app: el subtítulo blanco con contorno negro.

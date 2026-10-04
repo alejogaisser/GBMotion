@@ -1,5 +1,5 @@
 import React from 'react';
-import { AbsoluteFill, Video, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, OffthreadVideo, Video, useCurrentFrame, useRemotionEnvironment, useVideoConfig } from 'remotion';
 import type { CompositionProps, KeywordStyle, MotionPreset, TextLayer, TypographySettings } from '../types/motion';
 import { interpolatePreset } from '../engine/interpolatePreset';
 import { resolvePreset } from '../engine/resolvePreset';
@@ -253,6 +253,8 @@ const AnimatedTextLayer = ({ layer }: { layer: TextLayer }) => {
 export const TextComposition: React.FC<CompositionProps> = (props) => {
   const isChecker = props.background === 'checker';
   const frame = useCurrentFrame();
+  const { isRendering } = useRemotionEnvironment();
+  const guideStyle: React.CSSProperties = { width: '100%', height: '100%', objectFit: 'cover' };
   return (
     <AbsoluteFill style={{
       backgroundColor: backgroundFor(props.background, props.customBackground),
@@ -261,15 +263,15 @@ export const TextComposition: React.FC<CompositionProps> = (props) => {
       backgroundPosition: isChecker ? '0 0,0 32px,32px -32px,-32px 0' : undefined,
       overflow: 'hidden'
     }}>
-      {/* El video de guía va detrás de todo y sólo existe en la vista previa:
-          `exportVideo` manda las props sin él. */}
+      {/* El video va detrás de todo. En la vista previa es un <Video> normal; al
+          renderizar («Video con tus subtítulos») es <OffthreadVideo>, que saca los
+          cuadros exactos y mezcla el audio. Para el verde/MP4/alfa el servidor borra
+          `guide`, así que esos exports salen sin video. */}
       {props.guide && (
         <AbsoluteFill>
-          <Video
-            src={props.guide.src}
-            volume={props.guide.volume}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
+          {isRendering
+            ? <OffthreadVideo src={props.guide.src} volume={props.guide.volume} style={guideStyle} />
+            : <Video src={props.guide.src} volume={props.guide.volume} style={guideStyle} />}
         </AbsoluteFill>
       )}
       {props.layers.filter((layer) => {

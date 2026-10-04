@@ -1,5 +1,6 @@
 export type TransformKey = { frame: number; x: number; y: number; scale: number; rotation: number; opacity: number; easing: 'linear' | 'smooth' };
-export type WordTiming = { mode: 'color' | 'box'; color: string; words: { word: string; start: number; end: number }[] };
+export type WordHighlightMode = 'color' | 'box' | 'karaoke' | 'reveal' | 'scale';
+export type WordTiming = { mode: WordHighlightMode; color: string; words: { word: string; start: number; end: number }[] };
 export type AnimationMode = 'text' | 'words' | 'letters' | 'lines';
 export type PresetCategory = 'REVEAL' | 'ZOOM' | 'IMPACT' | 'SLIDE' | 'BLUR' | '3D' | 'WORDS' | 'LETTERS' | 'EPIC';
 export type EasingName = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'quadOut' | 'cubicOut' | 'expoOut' | 'backOut';
@@ -214,13 +215,14 @@ export type MotionOverrides = {
 /**
  * Video de referencia para encajar los subtítulos con la imagen y el audio.
  *
- * Vive sólo en la sesión: `src` es un blob del navegador, así que no sobrevive
- * a una recarga ni existe para el proceso de render. Es a propósito — el flujo
- * es exportar el subtítulo sobre verde y componerlo en CapCut, no quemar el
- * video acá adentro.
+ * `src` es un blob de la pestaña, o `/media/<id>` cuando el video ya se subió al
+ * servidor local (`mediaId`). Los blobs nunca llegan al render: para exportar con
+ * el video adentro el servidor arma la URL a partir de `mediaId`.
  */
 export type VideoGuide = {
   waveform?: number[];
+  /** Id del video subido al servidor local (`POST /api/media`). */
+  mediaId?: string;
   src: string;
   name: string;
   durationInFrames: number;
@@ -271,3 +273,10 @@ export type TextLayer = {
 };
 
 export type VideoFormat = { id: FormatId; label: string; width: number; height: number };
+
+/** Los únicos tamaños que se pueden exportar. Los comparten la app y el servidor de render. */
+export const videoFormats: VideoFormat[] = [
+  { id: 'portrait', label: '1080 × 1920 · 9:16', width: 1080, height: 1920 },
+  { id: 'landscape', label: '1920 × 1080 · 16:9', width: 1920, height: 1080 },
+  { id: 'square', label: '1080 × 1080 · 1:1', width: 1080, height: 1080 },
+];

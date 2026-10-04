@@ -16,7 +16,8 @@ export const RemotionRoot: React.FC = () => (
     defaultProps={defaultCompositionProps}
     calculateMetadata={({ props }) => {
       const typed = props as CompositionProps;
-      return { durationInFrames: getCompositionDuration(typed.layers) };
+      // Con un video detrás la composición dura al menos lo que dura el video.
+      return { durationInFrames: Math.max(getCompositionDuration(typed.layers), typed.guide?.durationInFrames ?? 0) };
     }}
   />
 );
