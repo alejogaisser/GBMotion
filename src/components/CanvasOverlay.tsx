@@ -97,11 +97,13 @@ export const CanvasOverlay = ({ layers, activeId, format, currentFrame, onEdit, 
       {guide.x !== undefined && <span className="smart-guide vertical" style={{ left: `${50 + guide.x / format.width * 100}%` }} />}
       {guide.y !== undefined && <span className="smart-guide horizontal" style={{ top: `${50 + guide.y / format.height * 100}%` }} />}
       {layers.filter((layer) => layer.visible).map((layer) => {
-        const box = estimateLayerBox(layer, format);
         const active = layer.id === activeId;
         const start = Math.max(0, layer.startFrame ?? 0);
         const end = start + getLayerDuration(layer);
         const inWindow = currentFrame >= start && currentFrame < end;
+        // Con cientos de frases sólo se dibujan la activa y las que están en pantalla.
+        if (!active && !inWindow) return null;
+        const box = estimateLayerBox(layer, format);
         return (
           <div
             key={layer.id}

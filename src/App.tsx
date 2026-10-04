@@ -26,12 +26,12 @@ import { builtInPresets, defaultPreset } from './presets/builtins';
 import { builtInStylePresets } from './presets/styles';
 import { resolvePreset } from './engine/resolvePreset';
 import { animationForLayer } from './engine/layerAnimation';
-import { cloneAnimation, cloneLayer, EditorHistory, MAX_LAYERS, remapKeywords } from './utils/editor';
+import { cloneAnimation, cloneLayer, EditorHistory, MAX_LAYERS, remapKeywords, remapWordTiming, splitWordTiming } from './utils/editor';
 import { getLayerDuration, getCompositionDuration } from './utils/duration';
-import { loadCustomPresets, loadCustomStylePresets, loadFavorites, saveCustomPresets, saveCustomStylePresets, saveFavorites } from './utils/storage';
+import { loadCustomComboPresets, loadCustomPresets, loadCustomStylePresets, loadFavorites, saveCustomComboPresets, saveCustomPresets, saveCustomStylePresets, saveFavorites } from './utils/storage';
 import { clearProject, loadProject, parseProjectFile, saveProject, serializeProject } from './utils/project';
 import type {
-  AnimationMode, BackgroundMode, CompositionProps, KeywordStyle, MotionPreset, TextLayer, VideoGuide,
+  AnimationMode, BackgroundMode, ComboPreset, CompositionProps, KeywordStyle, MotionPreset, TextLayer, VideoGuide,
 } from './types/motion';
 
 type Tool = 'estilo' | 'movimiento' | 'texto' | 'video' | 'salida';
@@ -67,6 +67,7 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [customPresets, setCustomPresets] = useState<MotionPreset[]>(loadCustomPresets);
   const [customStylePresets, setCustomStylePresets] = useState(loadCustomStylePresets);
+  const [customCombos, setCustomCombos] = useState<ComboPreset[]>(loadCustomComboPresets);
   const [favorites, setFavorites] = useState<string[]>(loadFavorites);
   const [tool, setTool] = useState<Tool>('texto');
   const [guide, setGuide] = useState<VideoGuide | null>(null);
@@ -123,9 +124,9 @@ export default function App() {
   /** Lee la duración real del archivo antes de mostrarlo, para dimensionar la línea de tiempo. */
   const pickGuide = async (file: File) => {
     const src = URL.createObjectURL(file);
+    const probe = document.createElement('video');
     try {
       const seconds = await new Promise<number>((resolve, reject) => {
-        const probe = document.createElement('video');
         probe.preload = 'metadata';
         probe.onloadedmetadata = () => resolve(probe.duration);
         probe.onerror = () => reject(new Error('formato no soportado'));
@@ -143,6 +144,9 @@ export default function App() {
     } catch {
       URL.revokeObjectURL(src);
       flashHint('No pude leer ese video. Probá con un MP4.');
+    } finally {
+      probe.removeAttribute('src');
+      probe.load();
     }
   };
 
@@ -174,6 +178,7 @@ export default function App() {
   useEffect(() => saveFavorites(favorites), [favorites]);
   useEffect(() => saveCustomPresets(customPresets), [customPresets]);
   useEffect(() => saveCustomStylePresets(customStylePresets), [customStylePresets]);
+  useEffect(() => saveCustomComboPresets(customCombos), [customCombos]);
   useEffect(() => {
     try { localStorage.setItem('gb-motion:interface-mode', advanced ? 'advanced' : 'simple'); } catch { /* la sesión sigue siendo usable */ }
   }, [advanced]);
@@ -337,12 +342,16 @@ export default function App() {
     if (source.locked || layers.length >= MAX_LAYERS || currentFrame <= source.startFrame || currentFrame >= end - 1) return;
     recordHistory();
     const words = source.text.match(/\S+/g) ?? [];
-    const cut = Math.max(1, Math.min(words.length - 1, Math.round(words.length * (currentFrame - source.startFrame) / (end - source.startFrame))));
+    const localCut = currentFrame - source.startFrame;
+    const timed = source.wordTiming && source.wordTiming.words.length === words.length ? splitWordTiming(source.wordTiming, localCut) : null;
+    const cut = timed && words.length > 1 && timed[0]
+      ? timed[0].words.length
+      : Math.max(1, Math.min(words.length - 1, Math.round(words.length * localCut / (end - source.startFrame))));
     const firstText = words.length > 1 ? words.slice(0, cut).join(' ') : source.text;
     const secondText = words.length > 1 ? words.slice(cut).join(' ') : source.text;
-    const second = { ...cloneLayer(source), wordTiming: undefined, transformKeys: undefined, id: createLayerId(), text: secondText, name: nameFor(secondText), startFrame: currentFrame, durationFrames: end - currentFrame,
+    const second = { ...cloneLayer(source), wordTiming: timed?.[1], transformKeys: undefined, id: createLayerId(), text: secondText, name: nameFor(secondText), startFrame: currentFrame, durationFrames: end - currentFrame,
       keywords: Object.fromEntries(Object.entries(source.keywords).filter(([i]) => Number(i) >= cut).map(([i, style]) => [Number(i) - cut, style])) };
-    setLayers((current) => current.flatMap((l) => l.id === source.id ? [{ ...l, wordTiming: undefined, text: firstText, name: nameFor(firstText), durationFrames: currentFrame - l.startFrame,
+    setLayers((current) => current.flatMap((l) => l.id === source.id ? [{ ...l, wordTiming: timed?.[0], text: firstText, name: nameFor(firstText), durationFrames: currentFrame - l.startFrame,
       keywords: Object.fromEntries(Object.entries(l.keywords).filter(([i]) => Number(i) < cut)) }, second] : [l]));
     setActiveLayerId(second.id);
     flashHint('Frase dividida. Revisá las palabras de cada parte.');
@@ -406,6 +415,19 @@ export default function App() {
       flashHint(`Guardado en «Mis estilos» como "${name}".`);
       return;
     }
+    if (kind === 'combo') {
+      setCustomCombos((current) => [...current, {
+        id: `custom-combo-${timestamp}`,
+        name,
+        description: 'Combinación guardada por vos.',
+        typography: structuredClone(activeLayer.typography),
+        animation: cloneAnimation(activeAnimation),
+        custom: true,
+      }]);
+      setSaveKind(null);
+      flashHint(`Guardado en «Combinaciones» como "${name}".`);
+      return;
+    }
     const source = activeAnimation.in ?? { preset: activeLayer.preset, overrides: activeLayer.overrides };
     const saved: MotionPreset = { ...resolvePreset(source.preset, source.overrides), id: `custom-${timestamp}`, name, custom: true };
     const overrides = overridesFor(saved);
@@ -417,7 +439,23 @@ export default function App() {
   const deleteMotionPreset = (id: string) => {
     setCustomPresets((current) => current.filter((item) => item.id !== id));
     setFavorites((current) => current.filter((item) => item !== id));
-    setLayers((current) => current.map((layer) => layer.preset.id === id ? { ...layer, preset: defaultPreset, overrides: overridesFor(defaultPreset) } : layer));
+    setLayers((current) => current.map((layer) => {
+      const animation = layer.animation;
+      const inHit = animation?.in?.preset.id === id;
+      const outHit = animation?.out?.preset.id === id;
+      const presetHit = layer.preset.id === id;
+      if (!inHit && !outHit && !presetHit) return layer;
+      return {
+        ...layer,
+        preset: presetHit ? defaultPreset : layer.preset,
+        overrides: presetHit ? overridesFor(defaultPreset) : layer.overrides,
+        animation: animation ? {
+          ...animation,
+          in: inHit ? { preset: defaultPreset, overrides: overridesFor(defaultPreset) } : animation.in,
+          out: outHit ? null : animation.out,
+        } : animation,
+      };
+    }));
   };
 
   const refreshExports = async () => {
@@ -595,7 +633,10 @@ export default function App() {
             {tool === 'estilo' && (
               <>
                 <details className="tuner template-picker"><summary>Combinaciones listas para usar</summary><div className="tuner-block template-list">
-                  {builtInComboPresets.map((combo) => <button className="ghost-button" key={combo.id} title={combo.description} onClick={() => updateActive((l) => ({ ...l, typography: structuredClone(combo.typography), animation: cloneAnimation(combo.animation), preset: combo.animation.in?.preset ?? l.preset, overrides: combo.animation.in?.overrides ?? l.overrides }))}>{combo.name}</button>)}
+                  {[...builtInComboPresets, ...customCombos].map((combo) => <span className="combo-item" key={combo.id}>
+                    <button className="ghost-button" title={combo.description} onClick={() => updateActive((l) => ({ ...l, typography: structuredClone(combo.typography), animation: cloneAnimation(combo.animation), preset: combo.animation.in?.preset ?? l.preset, overrides: combo.animation.in?.overrides ?? l.overrides }))}>{combo.name}</button>
+                    {combo.custom && <button className="ghost-button tiny" aria-label={`Borrar la combinación ${combo.name}`} title="Borrar esta combinación" onClick={() => setCustomCombos((current) => current.filter((item) => item.id !== combo.id))}>×</button>}
+                  </span>)}
                 </div></details>
                 <div className="control-row"><button className="ghost-button" onClick={applyStyleToAll}>Aplicar look a todas</button></div>
                 <StyleGallery
@@ -645,7 +686,7 @@ export default function App() {
                 keywords={activeLayer.keywords}
                 positionX={activeLayer.positionX}
                 positionY={activeLayer.positionY}
-                onText={(text) => updateActive((layer) => ({ ...layer, text, name: nameFor(text), wordTiming: text === layer.text ? layer.wordTiming : undefined, keywords: remapKeywords(layer.text, text, layer.keywords) }))}
+                onText={(text) => updateActive((layer) => ({ ...layer, text, name: nameFor(text), wordTiming: text === layer.text || !layer.wordTiming ? layer.wordTiming : remapWordTiming(layer.text, text, layer.wordTiming, getLayerDuration(layer)), keywords: remapKeywords(layer.text, text, layer.keywords) }))}
                 onTypography={(patch) => updateActive((layer) => ({ ...layer, typography: { ...layer.typography, ...patch } }))}
                 onPosition={(patch) => updateActive((layer) => ({ ...layer, ...patch }))}
                 onKeyword={(index) => updateActive((layer) => layer.keywords[index] ? layer : ({

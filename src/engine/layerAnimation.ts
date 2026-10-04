@@ -33,8 +33,11 @@ export const getAnimationTimelineDuration = (layer: TextLayer) => {
 export const getAnimationPhase = (layer: TextLayer, frame: number): AnimationPhase => {
   const animation = animationForLayer(layer);
   const inDuration = getSegmentTimelineDuration(animation.in, layer.text);
-  const holdDuration = Math.max(0, animation.holdFrames);
   const outDuration = getSegmentTimelineDuration(animation.out, layer.text);
+  // Con un largo manual la salida se ancla al final del clip; si no, la pausa es la configurada.
+  const holdDuration = typeof layer.durationFrames === 'number' && animation.out
+    ? Math.max(0, layer.durationFrames - inDuration - outDuration)
+    : Math.max(0, animation.holdFrames);
 
   if (animation.in && frame < inDuration) return { kind: 'in', segment: animation.in, timelineFrame: frame, reverse: false, fadeOut: false };
   if (frame < inDuration + holdDuration || !animation.out) {

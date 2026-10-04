@@ -71,7 +71,8 @@ const measuredLines = (text: string, fontSize: number, widthLimit: number, layer
 };
 
 const measure = (layer: TextLayer, fontSize: number, maxWidth: number) => {
-  const lineWidths = measuredLines(layer.text || ' ', fontSize, maxWidth, layer);
+  const shown = layer.typography.uppercase ? layer.text.toLocaleUpperCase('es') : layer.text;
+  const lineWidths = measuredLines(shown || ' ', fontSize, maxWidth, layer);
   const width = Math.max(fontSize * 0.5, ...lineWidths);
   const height = Math.max(fontSize * layer.typography.lineHeight, lineWidths.length * fontSize * layer.typography.lineHeight);
   const angle = Math.abs((layer.rotation ?? 0) * Math.PI / 180);
@@ -93,7 +94,7 @@ const layoutCacheKey = (layer: TextLayer, format: VideoFormat) => {
   return [
     format.width, format.height, layer.text, layer.autoFit, layer.autoLineBreak,
     layer.maxWidth, layer.maxHeight, layer.safeZone, layer.positionX, layer.positionY, layer.rotation,
-    t.fontSize, t.letterSpacing, t.wordSpacing, t.lineHeight,
+    t.fontSize, t.letterSpacing, t.wordSpacing, t.lineHeight, t.uppercase, t.fontWeight,
   ].join('|');
 };
 
