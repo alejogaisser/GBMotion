@@ -1,0 +1,5 @@
+# Lessons learned
+
+- 2026-10-03: In `src/engine/textPaint.ts` the outer stroke must use one `text-shadow` list (about 40 copies in a single paint pass), never chained `drop-shadow` filters, and ring steps must scale with stroke width. Source: chained drop-shadows dropped the render to 30 fps, and fixed ring steps left scalloped edges (GB Motion, September 2026).
+- 2026-10-03: `background-clip: text` (gradient fill) does not paint through a descendant that has its own `transform` or `filter`, so paint goes on the span holding the text, never on the animated container. Source: moving the paint one level up made gradient captions vanish from the canvas (GB Motion, September 2026).
+- 2026-10-03: The render process cannot open browser blob URLs, and a blob must only be revoked on unmount through a ref. Source: the guide video `src` is a tab blob that `exportVideo` has to strip, and with `guide` as an effect dependency, changing the volume revoked the URL still in use (GB Motion, September 2026).
