@@ -6,12 +6,18 @@ Aplicación local para crear kinetic typography y motion captions reutilizables.
 
 Una sola pantalla, sin scroll de página. Cuatro zonas fijas:
 
-- **Columna izquierda** — qué querés cambiar: Estilo, Movimiento, Texto, Video, Salida.
+- **Columna izquierda** — el flujo de trabajo, en orden: **Video** (subirlo y generar los subtítulos con IA), **Subtítulos** (el guion: corregir, buscar y reemplazar), **Texto**, **Estilo**, **Efectos** y **Exportar**.
 - **Centro** — el video, siempre visible. Se arrastra, se gira y se redimensiona directamente sobre el lienzo.
 - **Derecha** — las opciones de la herramienta elegida. Scrollea por dentro.
 - **Abajo** — la línea de tiempo: cuándo aparece cada frase.
 
 El botón de deslizadores en la barra superior abre los **ajustes finos** (guardar presets propios y exportar con transparencia). Todos los tiempos se muestran en segundos, no en cuadros.
+
+Atajos y ayudas de la pantalla:
+
+- **Espacio** reproduce o pausa (si el foco está en un campo de texto, escribe un espacio como siempre).
+- **Zona segura** (barra sobre el lienzo): muestra qué franjas tapa la interfaz de **TikTok** o **Reels**. Es sólo una guía de la vista previa: nunca aparece en el video exportado.
+- **Proyecto** (barra superior) agrupa abrir, descargar y empezar de nuevo. Al empezar de nuevo aparece una guía de tres pasos sobre el lienzo; **Escribir a mano** la cierra.
 
 ## Requisitos
 
@@ -36,8 +42,8 @@ Abrir `http://127.0.0.1:4173`.
 
 1. Escribí la frase en **Texto**.
 2. Elegí un look en **Estilo** — la galería dibuja cada tarjeta con tu propia frase.
-3. Elegí cómo entra en **Movimiento**.
-4. Descargá en **Salida**: el video con tus subtítulos listo para publicar, o con fondo verde para componerlo en CapCut.
+3. Elegí cómo entra en **Efectos**.
+4. Descargá en **Exportar**: el video con tus subtítulos listo para publicar, o con fondo verde para componerlo en CapCut.
 
 Si preferís que la IA escriba los subtítulos, subí el video en **Video** y usá **Generar subtítulos** (ver más abajo).
 
@@ -64,10 +70,10 @@ Un estilo puede combinar:
 
 ## Tu trabajo se guarda solo
 
-GB Motion guarda el proyecto (textos, capas, tiempos, fondo y formato) en el navegador de forma automática: si cerrás la pestaña y volvés, seguís donde estabas. En la barra superior:
+GB Motion guarda el proyecto (textos, capas, tiempos, fondo y formato) en el navegador de forma automática: si cerrás la pestaña y volvés, seguís donde estabas. En el menú **Proyecto** de la barra superior:
 
-- **📂 Abrir proyecto** carga un archivo `.json` guardado antes.
-- **💾 Descargar proyecto** guarda el proyecto actual como archivo, para respaldarlo o pasarlo a otra máquina.
+- **Abrir proyecto** carga un archivo `.json` guardado antes.
+- **Descargar proyecto** guarda el proyecto actual como archivo, para respaldarlo o pasarlo a otra máquina.
 - **Empezar de nuevo** borra el proyecto actual (pide confirmación).
 
 Mientras trabajás, la vista previa queda fija a la izquierda al desplazarte por los controles.
@@ -76,7 +82,23 @@ Mientras trabajás, la vista previa queda fija a la izquierda al desplazarte por
 
 La línea de tiempo permite agregar hasta 400 frases y recuperarlas completas al abrir el proyecto. Cada texto tiene su propia frase, efecto, tipografía, color, posición, delay y palabras destacadas. También se puede ocultar, duplicar o eliminar una capa sin afectar las demás.
 
+## Subtítulos (el guion)
+
+La herramienta **Subtítulos** lista todos los subtítulos en orden de tiempo, uno por fila:
+
+- Tocá el **tiempo** de una fila para saltar a ese subtítulo.
+- Corregí el **texto** directo en la fila: se conservan los tiempos de las palabras que no tocaste.
+- **Unir con la siguiente** junta dos subtítulos consecutivos; el tacho elimina uno.
+- **Buscar y reemplazar** cambia el texto en todos los subtítulos desbloqueados a la vez, y se deshace con un solo `Ctrl+Z`.
+- Ahí mismo están **Guion y subtítulos** (agregar frases desde un guion, importar y descargar SRT / VTT).
+
+### Plantilla para todos
+
+En **Estilo**, **Aplicar plantilla a todos** copia de la frase elegida a todas las desbloqueadas el look, los efectos de entrada, salida y bucle, y el resaltado (modo y color). No toca los textos, los tiempos, las posiciones ni los tamaños, y se deshace con un solo `Ctrl+Z`.
+
 ## Línea de tiempo
+
+Con más de 12 subtítulos la línea de tiempo muestra una **sola pista «Subtítulos»** (con arrastre, estirado, tiradores de entrada y salida y frases bloqueadas que no se mueven); el interruptor **Subtítulos | Pistas** vuelve a una fila por frase, con ocultar, bloquear, duplicar y eliminar. En la pista única sólo se dibujan los clips que caen en la parte visible.
 
 Cada clip dibuja adentro, con rayado, cuánto ocupan su **entrada** y su **salida**, con un tirador en el borde interno de cada una para alargarlas o acortarlas arrastrando —como en CapCut—. El tirador cambia `overrides.duration`; el desfase entre palabras es parte del efecto y no se toca desde ahí. El número queda sincronizado con los deslizadores del panel de movimiento.
 
@@ -97,7 +119,7 @@ Un texto sólo se dibuja entre `startFrame` y `startFrame + getLayerDuration(lay
 
 Igual que CapCut, cada frase tiene tres animaciones independientes:
 
-El panel **Movimiento** tiene una pestaña por pista:
+El panel **Efectos** tiene una pestaña por pista:
 
 - **Entrada** — cómo aparece. Agrupada en Aparecer, Impacto, Zoom, Deslizar, Palabras, Letras, 3D, Desenfoque y Épicos.
 - **Salida** — cómo se va. Primero los efectos diseñados para salir (marcados *salida*); después el resto, marcados *al revés*, porque el motor los reproduce invertidos.
@@ -158,6 +180,8 @@ Se guardan en `localStorage`, por lo que no requieren cuenta, red ni base de dat
 - `src/remotion`: composición multicapa compartida por Player, Studio y Renderer.
 - `src/types`: contrato tipado de animación, texto y formato.
 - `server`: servidor local dentro de Vite (subida y servicio de videos, render, transcripción, ffmpeg).
+- `src/hooks`: el estado de la app dividido en ganchos (`useProject`, `useGuide`, `useExport`, `useTranscription`).
+- `src/styles`: la hoja de estilos dividida en `tokens`, `layout`, `panels`, `controls`, `timeline`, `canvas` y `modal`; `src/styles.css` sólo los importa en ese orden.
 - `src/captions`: lógica pura de subtítulos automáticos (agrupar palabras, pasarlas a frases, leer las respuestas de la IA).
 - `src/utils`: persistencia local (`storage.ts` para presets/favoritos, `project.ts` para el proyecto).
 

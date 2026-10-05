@@ -168,7 +168,7 @@ export default function App() {
   // El menú «Proyecto» se cierra al tocar afuera o con Escape.
   useEffect(() => {
     if (!menuOpen) return;
-    const outside = (event: PointerEvent) => { if (!(event.target as HTMLElement | null)?.closest('.project-menu')) setMenuOpen(false); };
+    const outside = (event: PointerEvent) => { if (!(event.target instanceof Element && event.target.closest('.project-menu'))) setMenuOpen(false); };
     const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setMenuOpen(false); };
     document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
     return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
@@ -491,7 +491,10 @@ export default function App() {
                     {combo.custom && <button className="ghost-button tiny" aria-label={`Borrar la combinación ${combo.name}`} title="Borrar esta combinación" onClick={() => setCustomCombos((current) => current.filter((item) => item.id !== combo.id))}>×</button>}
                   </span>)}
                 </div></details>
-                <div className="control-row"><button className="ghost-button" onClick={project.applyStyleToAll}>Aplicar look a todas</button></div>
+                <div className="control-row">
+                  <button className="ghost-button" onClick={project.applyStyleToAll}>Aplicar look a todas</button>
+                  <button className="ghost-button" title="Copia el look, los efectos de entrada, salida y bucle y el resaltado de esta frase a todas las demás" onClick={project.applyTemplateToAll}>Aplicar plantilla a todos</button>
+                </div>
                 <StyleGallery
                   styles={stylePresets}
                   typography={activeLayer.typography}
