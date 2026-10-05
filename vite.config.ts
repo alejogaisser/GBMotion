@@ -27,6 +27,18 @@ export default defineConfig(({ mode }) => {
       port: 4173,
       watch: { ignored: ['**/exports/**', '**/media/**', '**/backups/**'] },
     },
-    build: { target: 'es2022', chunkSizeWarningLimit: 600 },
+    build: {
+      target: 'es2022',
+      chunkSizeWarningLimit: 600,
+      rollupOptions: {
+        output: {
+          // Remotion es lo más pesado: va en su propio archivo para que el resto de la app cargue rápido.
+          manualChunks(id: string) {
+            if (/node_modules[\\/](\.pnpm[\\/][^\\/]*[\\/]node_modules[\\/])?@?remotion/.test(id)) return 'remotion';
+            return undefined;
+          },
+        },
+      },
+    },
   };
 });

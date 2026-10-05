@@ -1,124 +1,68 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
 import {
-  Pause, Volume2, VolumeX, Undo2, Redo2, Check, Clapperboard, Film, FolderOpen, HardDriveDownload, Image, Palette, Play, RotateCcw, Save, Sliders, Type, Zap,
+  Captions, Check, Clapperboard, Download, Film, FolderOpen, HardDriveDownload, Palette, Pause, Play, Redo2, RotateCcw, Save, Sliders, Type, Undo2, Volume2, VolumeX, Zap,
 } from 'lucide-react';
-import { LibraryPanel } from './components/LibraryPanel';
 import { WordTimingPanel } from './components/WordTimingPanel';
-import { KeyframePanel } from './components/KeyframePanel';
 import { alignLayers, distributeLayers } from './engine/editorMotion';
-import { CaptionTools } from './components/CaptionTools';
-import { exportSubtitles, type CaptionCue } from './utils/subtitles';
-import { readWaveform } from './utils/audio';
 import { builtInComboPresets } from './presets/combos';
 import { StyleGallery } from './components/StyleGallery';
 import { StyleTuner } from './components/StyleTuner';
 import { MotionPanel } from './components/MotionPanel';
 import { TextPanel } from './components/TextPanel';
-import { OutputPanel, type ExportKind, type ExportState, type PastExport } from './components/OutputPanel';
-import { GuidePanel, type GuideUpload } from './components/GuidePanel';
+import { OutputPanel } from './components/OutputPanel';
+import { GuidePanel } from './components/GuidePanel';
 import { AutoCaptionsPanel } from './components/AutoCaptionsPanel';
-import { mediaExists, mediaUrl, uploadMedia } from './utils/mediaClient';
+import { SubtitlesPanel } from './components/SubtitlesPanel';
+import { EmptyState } from './components/EmptyState';
+import { SafeZoneOverlay, safeZoneLabels, type SafeZone } from './components/SafeZoneOverlay';
 import { CanvasOverlay } from './components/CanvasOverlay';
 import { TimelineDock } from './components/TimelineDock';
-import { SavePresetModal, type SavePresetKind } from './components/SavePresetModal';
+import type { SavePresetKind } from './components/SavePresetModal';
 import { TextComposition } from './remotion/TextComposition';
-import { createTextLayer, defaultCompositionProps, formats, overridesFor } from './remotion/defaults';
+import { formats, overridesFor } from './remotion/defaults';
 import { builtInPresets, defaultPreset } from './presets/builtins';
 import { builtInStylePresets } from './presets/styles';
 import { resolvePreset } from './engine/resolvePreset';
 import { animationForLayer } from './engine/layerAnimation';
-import { cloneAnimation, cloneLayer, EditorHistory, MAX_LAYERS, remapKeywords, remapWordTiming, splitWordTiming } from './utils/editor';
-import { getLayerDuration, getCompositionDuration } from './utils/duration';
+import { cloneAnimation, cloneLayer, MAX_LAYERS } from './utils/editor';
+import { getCompositionDuration } from './utils/duration';
 import { loadCustomComboPresets, loadCustomPresets, loadCustomStylePresets, loadFavorites, saveCustomComboPresets, saveCustomPresets, saveCustomStylePresets, saveFavorites } from './utils/storage';
-import { clearProject, loadProject, parseProjectFile, saveProject, serializeProject } from './utils/project';
-import type {
-  AnimationMode, BackgroundMode, ComboPreset, CompositionProps, KeywordStyle, MotionPreset, TextLayer, VideoGuide,
-} from './types/motion';
+import { loadProject, parseProjectFile } from './utils/project';
+import { useGuide } from './hooks/useGuide';
+import { useExport } from './hooks/useExport';
+import { createLayerId, useProject, withText } from './hooks/useProject';
+import type { AnimationMode, ComboPreset, CompositionProps, KeywordStyle, MotionPreset } from './types/motion';
 
-type Tool = 'estilo' | 'movimiento' | 'texto' | 'video' | 'salida';
+// Los paneles pesados o poco usados se bajan recién cuando se abren.
+const LibraryPanel = lazy(() => import('./components/LibraryPanel').then((module) => ({ default: module.LibraryPanel })));
+const SavePresetModal = lazy(() => import('./components/SavePresetModal').then((module) => ({ default: module.SavePresetModal })));
+const KeyframePanel = lazy(() => import('./components/KeyframePanel').then((module) => ({ default: module.KeyframePanel })));
 
+type Tool = 'video' | 'subtitulos' | 'texto' | 'estilo' | 'movimiento' | 'salida';
+
+/** El orden de la columna sigue el flujo: subir, subtitular, retocar, estilizar, animar, exportar. */
 const tools: { id: Tool; label: string; Icon: typeof Palette; title: string }[] = [
+  { id: 'video', label: 'Video', Icon: Clapperboard, title: 'Subir tu video y generar los subtítulos con IA' },
+  { id: 'subtitulos', label: 'Subtítulos', Icon: Captions, title: 'El guion: corregir, buscar y reemplazar' },
+  { id: 'texto', label: 'Texto', Icon: Type, title: 'Qué dice y dónde va' },
   { id: 'estilo', label: 'Estilo', Icon: Palette, title: 'Cómo se ve la letra' },
   { id: 'movimiento', label: 'Efectos', Icon: Zap, title: 'Cómo entra y sale' },
-  { id: 'texto', label: 'Texto', Icon: Type, title: 'Qué dice y dónde va' },
-  { id: 'video', label: 'Video', Icon: Clapperboard, title: 'Subir un video para calzar los subtítulos' },
-  { id: 'salida', label: 'Salida', Icon: Image, title: 'Tamaño, fondo y descarga' },
+  { id: 'salida', label: 'Exportar', Icon: Download, title: 'Tamaño, fondo y descarga' },
 ];
 
 const panelTitles: Record<Tool, { title: string; hint: string }> = {
+  video: { title: 'Video', hint: 'Subilo una vez: queda guardado para calzar y exportar tus subtítulos.' },
+  subtitulos: { title: 'Subtítulos', hint: 'Todo lo que dice tu video, en orden. Corregí, uní o reemplazá.' },
+  texto: { title: 'Texto', hint: 'Qué dice, con qué letra y dónde se ubica.' },
   estilo: { title: 'Estilo del subtítulo', hint: 'Elegí un look. Se aplica a la frase seleccionada.' },
   movimiento: { title: 'Efectos', hint: 'Cómo aparece, cuánto se queda y cómo se va.' },
-  texto: { title: 'Texto', hint: 'Qué dice, con qué letra y dónde se ubica.' },
-  video: { title: 'Video', hint: 'Subilo una vez: queda guardado para calzar y exportar tus subtítulos.' },
-  salida: { title: 'Salida', hint: 'Formato, fondo y descarga del video.' },
+  salida: { title: 'Exportar', hint: 'Formato, fondo y descarga del video.' },
 };
-
-const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
-
-const initialLayers = () => defaultCompositionProps.layers.map(cloneLayer);
-const createLayerId = () => `text-${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
-const nameFor = (text: string) => text.split(/\s+/).filter(Boolean).slice(0, 4).join(' ') || 'Frase vacía';
 
 export default function App() {
   const [restored] = useState(loadProject);
-  const [layers, setLayers] = useState<TextLayer[]>(() => restored?.layers ?? initialLayers());
-  const [activeLayerId, setActiveLayerId] = useState(() => restored?.activeLayerId ?? defaultCompositionProps.layers[0].id);
-  const [libraryOpen, setLibraryOpen] = useState(false);
-  const [guideName, setGuideName] = useState(() => restored?.guideName ?? '');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [customPresets, setCustomPresets] = useState<MotionPreset[]>(loadCustomPresets);
-  const [customStylePresets, setCustomStylePresets] = useState(loadCustomStylePresets);
-  const [customCombos, setCustomCombos] = useState<ComboPreset[]>(loadCustomComboPresets);
-  const [favorites, setFavorites] = useState<string[]>(loadFavorites);
   const [tool, setTool] = useState<Tool>('texto');
-  const [guide, setGuide] = useState<VideoGuide | null>(null);
-  const [guideMediaId, setGuideMediaId] = useState(() => restored?.guideMediaId ?? '');
-  const [guideUpload, setGuideUpload] = useState<GuideUpload>({ status: 'idle', progress: 0 });
-  const uploadToken = useRef(0);
-  const [exportVolume, setExportVolume] = useState(1);
-
-  const layerClipboard = useRef<TextLayer | null>(null);
-
-  const playerRef = useRef<PlayerRef>(null);
-  const seekTargetFrame = useRef<number | null>(null);
-  const projectSaveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const projectFileInput = useRef<HTMLInputElement>(null);
-  const panelBody = useRef<HTMLDivElement>(null);
-  const [projectSaved, setProjectSaved] = useState<boolean | null>(false);
-  const [projectName, setProjectName] = useState(() => restored?.name ?? 'Mi proyecto');
-  const [background, setBackground] = useState<BackgroundMode>(() => restored?.background ?? 'black');
-  const [customBackground, setCustomBackground] = useState(() => restored?.customBackground ?? '#131722');
-  const [formatId, setFormatId] = useState(() => restored?.formatId ?? 'portrait');
-  const historyGroup = useRef(0);
-  const snapshot = { layers, background, customBackground, formatId, name: projectName };
-  const [history] = useState(() => ({ current: new EditorHistory(snapshot) }));
-  const [historyStatus, setHistoryStatus] = useState({ undo: false, redo: false });
-  useLayoutEffect(() => {
-    history.current.observe(snapshot, historyGroup.current);
-    setHistoryStatus({ undo: history.current.canUndo, redo: history.current.canRedo });
-  }, [layers, background, customBackground, formatId, projectName]);
-  const [saveKind, setSaveKind] = useState<SavePresetKind | null>(null);
-  const [advanced, setAdvanced] = useState(() => {
-    try { return localStorage.getItem('gb-motion:interface-mode') === 'advanced'; } catch { return false; }
-  });
-  const [exportState, setExportState] = useState<ExportState>({ status: 'idle' });
-  const [pastExports, setPastExports] = useState<PastExport[]>([]);
-  const exportJobId = useRef<string | null>(null);
-  const [currentFrame, setCurrentFrame] = useState(30);
-  const [playing, setPlaying] = useState(false);
-  const [muted, setMuted] = useState(true);
-  const [canvasZoom, setCanvasZoom] = useState(1);
-  const [panelWidth, setPanelWidth] = useState(360);
-  const [timelineHeight, setTimelineHeight] = useState(220);
-  const stageViewport = useRef<HTMLDivElement>(null);
-  const [stageSize, setStageSize] = useState({ width: 640, height: 480 });
-  useEffect(() => {
-    const element = stageViewport.current; if (!element) return;
-    const observer = new ResizeObserver(([entry]) => setStageSize({ width: entry.contentRect.width, height: entry.contentRect.height }));
-    observer.observe(element); return () => observer.disconnect();
-  }, []);
-  const [appearanceClipboard, setAppearanceClipboard] = useState<TextLayer | null>(null);
   const [hint, setHint] = useState('');
   const hintTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const flashHint = (message: string) => {
@@ -127,103 +71,72 @@ export default function App() {
     hintTimer.current = setTimeout(() => setHint(''), 3600);
   };
 
-  /** Lee la duración real del archivo antes de mostrarlo, para dimensionar la línea de tiempo. */
-  const readDuration = async (src: string) => {
-    const probe = document.createElement('video');
-    try {
-      return await new Promise<number>((resolve, reject) => {
-        probe.preload = 'metadata';
-        probe.onloadedmetadata = () => resolve(probe.duration);
-        probe.onerror = () => reject(new Error('formato no soportado'));
-        probe.src = src;
-      });
-    } finally {
-      // Sin esto el elemento de prueba sigue sosteniendo el archivo.
-      probe.removeAttribute('src');
-      probe.load();
-    }
-  };
-  const revokeBlob = (src: string) => { if (src.startsWith('blob:')) URL.revokeObjectURL(src); };
+  const playerRef = useRef<PlayerRef>(null);
+  const seekTargetFrame = useRef<number | null>(null);
+  const projectFileInput = useRef<HTMLInputElement>(null);
+  const panelBody = useRef<HTMLDivElement>(null);
+  const [currentFrame, setCurrentFrame] = useState(30);
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(true);
+  const [canvasZoom, setCanvasZoom] = useState(1);
+  const [safeZone, setSafeZone] = useState<SafeZone>('none');
+  const [panelWidth, setPanelWidth] = useState(360);
+  const [timelineHeight, setTimelineHeight] = useState(220);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showEmpty, setShowEmpty] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [saveKind, setSaveKind] = useState<SavePresetKind | null>(null);
+  const [advanced, setAdvanced] = useState(() => {
+    try { return localStorage.getItem('gb-motion:interface-mode') === 'advanced'; } catch { return false; }
+  });
+  const [customPresets, setCustomPresets] = useState<MotionPreset[]>(loadCustomPresets);
+  const [customStylePresets, setCustomStylePresets] = useState(loadCustomStylePresets);
+  const [customCombos, setCustomCombos] = useState<ComboPreset[]>(loadCustomComboPresets);
+  const [favorites, setFavorites] = useState<string[]>(loadFavorites);
+  const [appearanceClipboard, setAppearanceClipboard] = useState<ReturnType<typeof cloneLayer> | null>(null);
 
-  const pickGuide = async (file: File) => {
-    const src = URL.createObjectURL(file);
-    try {
-      const seconds = await readDuration(src);
-      if (!Number.isFinite(seconds) || seconds <= 0) throw new Error('duración desconocida');
-      setGuideName(file.name);
-      setGuide((current) => {
-        if (current) revokeBlob(current.src);
-        return { src, name: file.name, durationInFrames: Math.round(seconds * 30), volume: 1 };
-      });
-      // El video se guarda en el servidor local para que sobreviva a una recarga y
-      // para poder exportarlo con los subtítulos adentro.
-      const token = ++uploadToken.current;
-      setGuideMediaId('');
-      setGuideUpload({ status: 'uploading', progress: 0 });
-      uploadMedia(file, (progress) => { if (uploadToken.current === token) setGuideUpload({ status: 'uploading', progress }); })
-        .then((info) => {
-          if (uploadToken.current !== token) return;
-          setGuide((current) => current?.src === src ? { ...current, mediaId: info.mediaId } : current);
-          setGuideMediaId(info.mediaId);
-          setGuideUpload({ status: 'idle', progress: 1 });
-          flashHint('Video guardado.');
-        })
-        .catch((error: unknown) => {
-          if (uploadToken.current !== token) return;
-          setGuideUpload({ status: 'error', progress: 0 });
-          flashHint(error instanceof Error ? error.message : 'No pude guardar el video.');
-        });
-      flashHint('Video cargado. Preparando la forma de onda…');
-      if (file.size <= 150_000_000) void readWaveform(file).then((waveform) => setGuide((current) => current?.src === src ? { ...current, waveform } : current)).catch(() => flashHint('Video listo. No se pudo leer la forma de onda; podés sincronizar escuchando el audio.'));
-      else flashHint('Video listo. La forma de onda se omite en archivos mayores de 150 MB.');
-    } catch {
-      URL.revokeObjectURL(src);
-      flashHint('No pude leer ese video. Probá con un MP4.');
-    }
-  };
+  const stageViewport = useRef<HTMLDivElement>(null);
+  const [stageSize, setStageSize] = useState({ width: 640, height: 480 });
+  useEffect(() => {
+    const element = stageViewport.current; if (!element) return;
+    const observer = new ResizeObserver(([entry]) => setStageSize({ width: entry.contentRect.width, height: entry.contentRect.height }));
+    observer.observe(element); return () => observer.disconnect();
+  }, []);
 
-  const removeGuide = () => {
-    uploadToken.current++;
-    setGuideName(''); setGuideMediaId(''); setGuideUpload({ status: 'idle', progress: 0 });
-    setGuide((current) => {
-      if (current) revokeBlob(current.src);
-      return null;
-    });
-  };
+  const guideApi = useGuide({ initialMediaId: restored?.guideMediaId, initialName: restored?.guideName, flashHint });
+  const { guide, setGuide, guideName, guideMediaId, guideUpload, pickGuide, removeGuide, relinkGuide } = guideApi;
 
-  /** Vuelve a conectar un video ya subido (después de recargar o de abrir un proyecto). */
-  const relinkGuide = async (mediaId: string, name: string) => {
-    setGuideMediaId(mediaId);
-    if (!(await mediaExists(mediaId))) { setGuideMediaId((current) => current === mediaId ? '' : current); return; }
-    const src = mediaUrl(mediaId);
-    try {
-      const seconds = await readDuration(src);
-      if (!Number.isFinite(seconds) || seconds <= 0) throw new Error('duración desconocida');
-      setGuide((current) => current ?? { src, name: name || 'video', durationInFrames: Math.round(seconds * 30), volume: 1, mediaId });
-    } catch {
-      setGuideMediaId((current) => current === mediaId ? '' : current);
-    }
-  };
-  useEffect(() => { if (restored?.guideMediaId) void relinkGuide(restored.guideMediaId, restored.guideName ?? ''); }, []);
+  // `useExport` se arma después del proyecto (necesita las frases); este puente le avisa de cada edición.
+  const editedRef = useRef(() => {});
+  const project = useProject({
+    restored, guideName, guideMediaId, flashHint,
+    onEdited: () => editedRef.current(),
+    onProjectReplaced: () => {
+      seekTargetFrame.current = null; removeGuide();
+      playerRef.current?.seekTo(0); setCurrentFrame(0);
+    },
+    onRelink: (mediaId, name) => void relinkGuide(mediaId, name),
+    onGuideName: guideApi.setGuideName,
+    onLayerAdded: () => setTool('texto'),
+  });
+  const {
+    layers, setLayers, activeLayer, selectedIds, selected, selectLayer, projectName, setProjectName, background, setBackground, customBackground, setCustomBackground,
+    formatId, setFormatId, format, projectSaved, historyStatus, layerClipboard, recordHistory, updateLayer, updateActive, undo, redo,
+  } = project;
+  const activeAnimation = animationForLayer(activeLayer);
 
-  // El blob se libera sólo al desmontar. Con `guide` como dependencia, cualquier
-  // cambio de volumen dispararía la limpieza y revocaría la URL que el video
-  // sigue usando.
-  const guideRef = useRef<VideoGuide | null>(null);
-  guideRef.current = guide;
-  useEffect(() => () => { if (guideRef.current) revokeBlob(guideRef.current.src); }, []);
+  const inputProps: CompositionProps = { layers, background, customBackground, guide };
+  const exportApi = useExport({ inputProps, background, format, guideMediaId, guideName: guide?.name });
+  editedRef.current = exportApi.resetExportState;
+  const { exportState, pastExports, exportVolume, setExportVolume, exportVideo, cancelExport } = exportApi;
 
   const presets = useMemo(() => [...builtInPresets, ...customPresets], [customPresets]);
   const stylePresets = useMemo(() => [...builtInStylePresets, ...customStylePresets], [customStylePresets]);
-  const activeLayer = layers.find((layer) => layer.id === activeLayerId) ?? layers[0];
-  const activeAnimation = animationForLayer(activeLayer);
-  const format = formats.find((item) => item.id === formatId) ?? formats[0];
-  const inputProps: CompositionProps = { layers, background, customBackground, guide };
   // Con un video cargado la línea de tiempo tiene que cubrirlo entero, aunque
   // los subtítulos todavía no lleguen hasta el final.
   const duration = Math.max(getCompositionDuration(layers), guide?.durationInFrames ?? 0);
 
-  // Cada herramienta arranca desde arriba: sin esto, entrar a «Salida» después
+  // Cada herramienta arranca desde arriba: sin esto, entrar a «Exportar» después
   // de scrollear la galería deja el panel a mitad de camino.
   useEffect(() => { if (panelBody.current) panelBody.current.scrollTop = 0; }, [tool]);
   useEffect(() => saveFavorites(favorites), [favorites]);
@@ -233,22 +146,6 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem('gb-motion:interface-mode', advanced ? 'advanced' : 'simple'); } catch { /* la sesión sigue siendo usable */ }
   }, [advanced]);
-  useEffect(() => {
-    clearTimeout(projectSaveTimer.current);
-    setProjectSaved(false);
-    projectSaveTimer.current = setTimeout(() => {
-      setProjectSaved(saveProject({ layers, background, customBackground, formatId, activeLayerId, name: projectName, guideName, guideMediaId: guideMediaId || undefined }) ? true : null);
-    }, 600);
-    return () => clearTimeout(projectSaveTimer.current);
-  }, [layers, background, customBackground, formatId, activeLayerId, projectName, guideName, guideMediaId]);
-  const latestProject = useRef({ ...snapshot, activeLayerId, guideName, guideMediaId: guideMediaId || undefined });
-  latestProject.current = { ...snapshot, activeLayerId, guideName, guideMediaId: guideMediaId || undefined };
-  useEffect(() => {
-    const flush = () => saveProject(latestProject.current);
-    const visibility = () => { if (document.visibilityState === 'hidden') flush(); };
-    window.addEventListener('pagehide', flush); document.addEventListener('visibilitychange', visibility);
-    return () => { window.removeEventListener('pagehide', flush); document.removeEventListener('visibilitychange', visibility); };
-  }, []);
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
@@ -268,24 +165,16 @@ export default function App() {
     setCurrentFrame(next);
   }, [currentFrame, duration]);
 
+  // El menú «Proyecto» se cierra al tocar afuera o con Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const outside = (event: PointerEvent) => { if (!(event.target as HTMLElement | null)?.closest('.project-menu')) setMenuOpen(false); };
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setMenuOpen(false); };
+    document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
+    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
+  }, [menuOpen]);
+
   const seek = (frame: number) => { const target = Math.max(0, Math.min(duration - 1, frame)); seekTargetFrame.current = target; playerRef.current?.pause(); playerRef.current?.seekTo(target); setCurrentFrame(target); };
-  const selectLayer = (id: string, multiple = false) => { setActiveLayerId(id); setSelectedIds((ids) => multiple ? ids.includes(id) ? ids.filter((i) => i !== id) : [...ids, id] : [id]); };
-  const selected = layers.filter((l) => selectedIds.includes(l.id));
-  const updateLayer = (id: string, updater: (layer: TextLayer) => TextLayer) => {
-    setLayers((current) => current.map((layer) => layer.id === id ? updater(layer) : layer));
-    setExportState((current) => current.status === 'rendering' ? current : { status: 'idle' });
-  };
-  const updateActive = (updater: (layer: TextLayer) => TextLayer) => { if (!activeLayer.locked) updateLayer(activeLayer.id, updater); else flashHint('Desbloqueá la frase para editarla.'); };
-  const recordHistory = () => { historyGroup.current++; };
-  const restoreHistory = (next: typeof snapshot | undefined) => {
-    if (!next) return;
-    setLayers(next.layers); setBackground(next.background); setCustomBackground(next.customBackground);
-    setFormatId(next.formatId); setProjectName(next.name);
-    if (!next.layers.some((layer) => layer.id === activeLayerId)) setActiveLayerId(next.layers[0].id);
-    setHistoryStatus({ undo: history.current.canUndo, redo: history.current.canRedo });
-  };
-  const undo = () => restoreHistory(history.current.undo());
-  const redo = () => restoreHistory(history.current.redo());
 
   const chooseInPreset = (next: MotionPreset | null) => {
     if (next && next.intent === 'out') {
@@ -324,143 +213,38 @@ export default function App() {
     };
   });
 
-  const applyProjectState = (nextLayers: TextLayer[], nextActiveId: string, nextBackground: BackgroundMode, nextCustomBackground: string, nextFormatId: string, name = 'Mi proyecto') => {
-    history.current.reset({ layers: nextLayers, background: nextBackground, customBackground: nextCustomBackground, formatId: nextFormatId, name });
-    setHistoryStatus({ undo: false, redo: false }); setSelectedIds([]); setProjectName(name); layerClipboard.current = null;
-    seekTargetFrame.current = null; removeGuide();
-    playerRef.current?.seekTo(0); setCurrentFrame(0);
-    setLayers(nextLayers); setActiveLayerId(nextActiveId);
-    setBackground(nextBackground); setCustomBackground(nextCustomBackground); setFormatId(nextFormatId);
-    setExportState((current) => current.status === 'rendering' ? current : { status: 'idle' });
-  };
+  const resetProject = () => { if (project.reset()) setShowEmpty(true); };
 
-  const reset = () => {
-    if (!window.confirm('Esto empieza un proyecto nuevo y borra el actual. ¿Seguir?')) return;
-    const next = initialLayers();
-    clearProject();
-    applyProjectState(next, next[0].id, 'black', '#131722', 'portrait');
-  };
-
-  const downloadProject = () => {
-    const blob = new Blob([serializeProject({ layers, background, customBackground, formatId, activeLayerId, name: projectName, guideName, guideMediaId: guideMediaId || undefined })], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `gb-motion-proyecto-${new Date().toISOString().slice(0, 10)}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const openProjectFile = async (file: File) => {
-    const parsed = parseProjectFile(await file.text());
-    if (!parsed) { flashHint('Ese archivo no es un proyecto de GB Motion.'); return; }
-    applyProjectState(parsed.layers, parsed.activeLayerId, parsed.background, parsed.customBackground, parsed.formatId, parsed.name);
-    setGuideName(parsed.guideName ?? '');
-    if (parsed.guideMediaId) void relinkGuide(parsed.guideMediaId, parsed.guideName ?? '');
-    flashHint('Proyecto abierto.');
-  };
-
-  /** Una frase nueva hereda el look y el movimiento de la que estabas editando. */
-  const addLayer = () => {
-    if (layers.length >= MAX_LAYERS) return;
-    recordHistory();
-    const source = activeLayer;
-    const next = createTextLayer('NUEVA FRASE', createLayerId(), source.preset);
-      next.typography = structuredClone(source.typography);
-    next.overrides = { ...source.overrides };
-    next.animation = cloneAnimation(animationForLayer(source));
-    next.positionX = source.positionX;
-    next.positionY = source.positionY;
-      // Continúa después de la frase elegida.
-    next.startFrame = Math.max(0, (source.startFrame ?? 0) + getLayerDuration(source));
-    setLayers((current) => [...current, next]);
-    setActiveLayerId(next.id);
-    setTool('texto');
-  };
-
-  // Los subtítulos automáticos llegan después de una espera: se leen las frases actuales, no las del clic.
-  const layersRef = useRef(layers);
-  layersRef.current = layers;
-  const applyAutoCaptions = (created: TextLayer[], mode: 'replace' | 'append') => {
-    const kept = mode === 'replace' ? layersRef.current.filter((layer) => layer.locked) : layersRef.current;
-    if (created.length === 0) return 'No se detectó voz en el video.';
-    if (kept.length + created.length > MAX_LAYERS) return `Son demasiados subtítulos (${created.length}). Subí «palabras por subtítulo» o acortá el video.`;
-    recordHistory();
-    setLayers([...kept, ...created]);
-    setActiveLayerId(created[0].id);
-    setSelectedIds([]);
-    flashHint(`${created.length} subtítulos creados. Podés deshacerlo con Ctrl+Z.`);
-    return null;
-  };
-
-  const importCaptions = (cues: CaptionCue[]) => {
-    if (layers.length + cues.length > MAX_LAYERS) throw new Error(`Podés tener hasta ${MAX_LAYERS} frases. No se importó ninguna para evitar recortes.`);
-    recordHistory();
-    const additions = cues.map((cue) => ({ ...cloneLayer(activeLayer), ...cue, id: createLayerId(), name: nameFor(cue.text), keywords: {}, wordTiming: undefined, transformKeys: undefined, locked: false, visible: true }));
-    setLayers((current) => [...current, ...additions]); setActiveLayerId(additions[0].id);
-    flashHint(`${additions.length} frases agregadas. Podés deshacer la importación.`);
-  };
-  const downloadCaptions = (kind: 'srt' | 'vtt') => {
-    const url = URL.createObjectURL(new Blob([exportSubtitles(layers, kind)], { type: 'text/plain;charset=utf-8' }));
-    const a = document.createElement('a'); a.href = url; a.download = `${projectName || 'subtitulos'}.${kind}`; a.click(); URL.revokeObjectURL(url);
-  };
-  const splitLayer = () => {
-    const source = activeLayer; const end = source.startFrame + getLayerDuration(source);
-    if (source.locked || layers.length >= MAX_LAYERS || currentFrame <= source.startFrame || currentFrame >= end - 1) return;
-    recordHistory();
-    const words = source.text.match(/\S+/g) ?? [];
-    const localCut = currentFrame - source.startFrame;
-    const timed = source.wordTiming && source.wordTiming.words.length === words.length ? splitWordTiming(source.wordTiming, localCut) : null;
-    const cut = timed && words.length > 1 && timed[0]
-      ? timed[0].words.length
-      : Math.max(1, Math.min(words.length - 1, Math.round(words.length * localCut / (end - source.startFrame))));
-    const firstText = words.length > 1 ? words.slice(0, cut).join(' ') : source.text;
-    const secondText = words.length > 1 ? words.slice(cut).join(' ') : source.text;
-    const second = { ...cloneLayer(source), wordTiming: timed?.[1], transformKeys: undefined, id: createLayerId(), text: secondText, name: nameFor(secondText), startFrame: currentFrame, durationFrames: end - currentFrame,
-      keywords: Object.fromEntries(Object.entries(source.keywords).filter(([i]) => Number(i) >= cut).map(([i, style]) => [Number(i) - cut, style])) };
-    setLayers((current) => current.flatMap((l) => l.id === source.id ? [{ ...l, wordTiming: timed?.[0], text: firstText, name: nameFor(firstText), durationFrames: currentFrame - l.startFrame,
-      keywords: Object.fromEntries(Object.entries(l.keywords).filter(([i]) => Number(i) < cut)) }, second] : [l]));
-    setActiveLayerId(second.id);
-    flashHint('Frase dividida. Revisá las palabras de cada parte.');
-  };
-
-  const duplicateLayer = (id: string) => {
-    const source = layers.find((layer) => layer.id === id);
-    if (!source || layers.length >= MAX_LAYERS) return;
-    recordHistory();
-    const next = cloneLayer(source);
-    next.id = createLayerId();
-    next.name = `${source.name} copia`;
-    next.startFrame = (source.startFrame ?? 0) + 15;
-    setLayers((current) => [...current, next]);
-    setActiveLayerId(next.id);
-  };
-
-  const deleteLayer = (id: string) => {
-    if (layers.length === 1 || layers.find((layer) => layer.id === id)?.locked) return;
-    recordHistory();
-    const remaining = layers.filter((layer) => layer.id !== id);
-    setLayers(remaining);
-    if (activeLayerId === id) setActiveLayerId(remaining[0].id);
+  const applyAutoCaptions = (created: Parameters<typeof project.applyAutoCaptions>[0], mode: 'replace' | 'append') => {
+    const problem = project.applyAutoCaptions(created, mode);
+    if (!problem) setShowEmpty(false);
+    return problem;
   };
 
   useEffect(() => {
-      const onKeyDown = (event: KeyboardEvent) => {
-        const target = event.target as HTMLElement | null;
-        if (document.querySelector('[role="dialog"]')) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (document.querySelector('[role="dialog"]')) return;
       if (target instanceof HTMLElement && target.matches('input, textarea, select, [contenteditable="true"]')) return;
       const modifier = event.ctrlKey || event.metaKey;
+      // Espacio: reproducir o pausar, salvo que el foco esté en algo que ya usa Espacio.
+      if (!modifier && (event.code === 'Space' || event.key === ' ')) {
+        if (target instanceof HTMLElement && target.closest('button, a, summary, [role="button"], [role="slider"]')) return;
+        event.preventDefault();
+        if (playerRef.current?.isPlaying()) playerRef.current.pause(); else playerRef.current?.play();
+        return;
+      }
       if (modifier && event.key.toLowerCase() === 'c') { event.preventDefault(); layerClipboard.current = cloneLayer(activeLayer); }
       if (modifier && event.key.toLowerCase() === 'v' && layerClipboard.current && layers.length < MAX_LAYERS) {
         event.preventDefault();
         recordHistory();
         const next = cloneLayer(layerClipboard.current);
         next.id = createLayerId(); next.name = `${next.name} copia`; next.startFrame = (next.startFrame ?? 0) + 15;
-        setLayers((current) => [...current, next]); setActiveLayerId(next.id);
+        setLayers((current) => [...current, next]); project.setActiveLayerId(next.id);
       }
-      if (modifier && event.key.toLowerCase() === 'd') { event.preventDefault(); duplicateLayer(activeLayer.id); }
+      if (modifier && event.key.toLowerCase() === 'd') { event.preventDefault(); project.duplicateLayer(activeLayer.id); }
       if (modifier && event.key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) redo(); else undo(); }
-      if (event.key === 'Delete' && layers.length > 1 && !activeLayer.locked) { event.preventDefault(); deleteLayer(activeLayer.id); }
+      if (event.key === 'Delete' && layers.length > 1 && !activeLayer.locked) { event.preventDefault(); project.deleteLayer(activeLayer.id); }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -525,78 +309,9 @@ export default function App() {
     }));
   };
 
-  const refreshExports = async () => {
-    try {
-      const result = await (await fetch('/api/exports')).json() as { files?: PastExport[] };
-      setPastExports(result.files ?? []);
-    } catch { /* que falle el listado no es fatal */ }
-  };
-  useEffect(() => { void refreshExports(); }, []);
-
-  const exportVideo = async (kind: ExportKind) => {
-    if (exportJobId.current) return;
-    if (kind === 'burn' && !guideMediaId) { setExportState({ status: 'error', message: 'Subí un video en «Video» para exportarlo con subtítulos.' }); return; }
-      const requestId = `starting-${Date.now()}`;
-      let ownedJobId = requestId;
-    exportJobId.current = requestId;
-    setExportState({ status: 'rendering', message: 'Preparando tu video…', progress: 0 });
-    try {
-      const exportBackground = kind === 'green' ? 'green' : kind === 'alpha' ? 'transparent' : background === 'checker' ? 'black' : background;
-      // El video de guía se saca siempre: su `src` es un blob de esta pestaña,
-      // que el proceso de render no puede abrir, y el MP4 tiene que salir
-      // limpio para componerlo en CapCut.
-      const { guide: _guide, ...exportProps } = inputProps;
-      // Para «Video con tus subtítulos» el servidor arma la URL del video a partir del id.
-      const media = kind === 'burn' ? { mediaId: guideMediaId, name: guide?.name, volume: exportVolume } : undefined;
-      const response = await fetch('/api/render', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ props: { ...exportProps, background: exportBackground }, format, kind, media }),
-      });
-      const started = await response.json() as { jobId?: string; error?: string };
-      if (!response.ok || !started.jobId) throw new Error(started.error ?? 'No se pudo iniciar el video');
-      if (exportJobId.current !== requestId) { await fetch(`/api/render/${started.jobId}`, { method: 'DELETE' }); return; }
-        exportJobId.current = started.jobId;
-        ownedJobId = started.jobId;
-      for (;;) {
-        await sleep(700);
-        if (exportJobId.current !== started.jobId) return;
-          const job = await (await fetch(`/api/render/${started.jobId}`)).json() as { status: string; progress?: number; url?: string; error?: string };
-          if (exportJobId.current !== ownedJobId) return;
-        if (job.status === 'rendering') { setExportState({ status: 'rendering', message: 'Creando tu video…', progress: job.progress ?? 0 }); continue; }
-          if (job.status === 'cancelled') { exportJobId.current = null; setExportState({ status: 'idle' }); return; }
-        if (job.status === 'done' && job.url) {
-          exportJobId.current = null;
-          setExportState({ status: 'done', message: '¡Tu video está listo!', url: job.url });
-          const anchor = document.createElement('a');
-          anchor.href = job.url;
-          anchor.download = '';
-          anchor.click();
-          void refreshExports();
-          return;
-        }
-        throw new Error(job.error ?? 'No se pudo crear el video');
-      }
-      } catch (error) {
-        if (exportJobId.current !== ownedJobId) return;
-        exportJobId.current = null;
-      setExportState({ status: 'error', message: error instanceof Error ? error.message : 'No se pudo crear el video' });
-    }
-  };
-
-  const cancelExport = async () => {
-    const jobId = exportJobId.current;
-    exportJobId.current = null;
-    setExportState({ status: 'idle' });
-    if (jobId) { try { await fetch(`/api/render/${jobId}`, { method: 'DELETE' }); } catch { /* ignorar */ } }
-  };
-
-  const applyStyleToAll = () => {
-    recordHistory();
-    setLayers((current) => current.map((l) => l.locked ? l : { ...l, typography: { ...structuredClone(activeLayer.typography), fontSize: l.typography.fontSize } }));
-    flashHint('Estilo aplicado a las frases desbloqueadas. Se conservaron tiempos, tamaños y posiciones.');
-  };
   const sampleWord = activeLayer.text.trim().split(/\s+/)[0]?.slice(0, 9) || 'Aa';
+  const stageWidth = Math.max(1, Math.min(stageSize.width - 32, (stageSize.height - 32) * format.width / format.height)) * canvasZoom;
+  const stageHeight = Math.max(1, Math.min(stageSize.height - 32, (stageSize.width - 32) * format.height / format.width)) * canvasZoom;
 
   return (
     <div className="app" style={{ '--panel-width': `${panelWidth}px`, '--timeline-height': `${timelineHeight}px` } as React.CSSProperties} onPointerDownCapture={recordHistory} onFocusCapture={recordHistory}
@@ -604,9 +319,16 @@ export default function App() {
       <header className="topbar">
         <span className="brand"><span className="brand-mark"><Film size={15} /></span>GB <b>MOTION</b></span>
         <div className="topbar-group">
-          <button type="button" className="icon-button" title="Abrir un proyecto guardado" aria-label="Abrir proyecto" onClick={() => projectFileInput.current?.click()}><FolderOpen size={15} /></button>
-          <button type="button" className="icon-button" title="Descargar este proyecto" aria-label="Descargar proyecto" onClick={downloadProject}><HardDriveDownload size={15} /></button>
-          <button type="button" className="icon-button" title="Empezar de nuevo" aria-label="Empezar de nuevo" onClick={reset}><RotateCcw size={15} /></button>
+          <div className="project-menu">
+            <button type="button" className="ghost-button" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>Proyecto</button>
+            {menuOpen && (
+              <div className="project-menu-list" role="menu" aria-label="Proyecto">
+                <button type="button" role="menuitem" title="Abrir un proyecto guardado" aria-label="Abrir proyecto" onClick={() => { setMenuOpen(false); projectFileInput.current?.click(); }}><FolderOpen size={14} /> Abrir proyecto</button>
+                <button type="button" role="menuitem" title="Descargar este proyecto" aria-label="Descargar proyecto" onClick={() => { setMenuOpen(false); project.downloadProject(); }}><HardDriveDownload size={14} /> Descargar proyecto</button>
+                <button type="button" role="menuitem" title="Empezar de nuevo" aria-label="Empezar de nuevo" onClick={() => { setMenuOpen(false); resetProject(); }}><RotateCcw size={14} /> Empezar de nuevo</button>
+              </div>
+            )}
+          </div>
           <button type="button" className="icon-button" aria-label="Deshacer" title="Deshacer (Ctrl+Z)" disabled={!historyStatus.undo} onClick={undo}><Undo2 size={16} /></button>
           <button type="button" className="icon-button" aria-label="Rehacer" title="Rehacer (Ctrl+Shift+Z)" disabled={!historyStatus.redo} onClick={redo}><Redo2 size={16} /></button>
           <input className="project-name" aria-label="Nombre del proyecto" value={projectName} maxLength={80} onChange={(event) => setProjectName(event.target.value)} />
@@ -615,7 +337,7 @@ export default function App() {
         <div className="topbar-right">
           <button className="ghost-button" onClick={() => setLibraryOpen(true)}>Biblioteca</button>
           <button type="button" className={`icon-button ${advanced ? 'on' : ''}`} aria-pressed={advanced}
-            title={advanced ? 'Ajustes finos activados' : 'Mostrar ajustes finos'} onClick={() => setAdvanced((value) => !value)}>
+            title={advanced ? 'Ajustes finos activados' : 'Mostrar ajustes finos'} aria-label="Ajustes finos" onClick={() => setAdvanced((value) => !value)}>
             <Sliders size={15} />
           </button>
           {advanced && <button type="button" className="icon-button" title="Guardar en mi biblioteca" aria-label="Guardar en mi biblioteca" onClick={() => setSaveKind('motion')}><Save size={15} /></button>}
@@ -627,7 +349,7 @@ export default function App() {
 
       <input ref={projectFileInput} type="file" accept="application/json,.json" hidden onChange={(event) => {
         const file = event.target.files?.[0];
-        if (file) void openProjectFile(file);
+        if (file) void project.openProjectFile(file);
         event.target.value = '';
       }} />
 
@@ -647,37 +369,45 @@ export default function App() {
             <button className="ghost-button" onClick={() => { const frame = activeLayer.startFrame; seekTargetFrame.current = frame; playerRef.current?.seekTo(frame); setCurrentFrame(frame); playerRef.current?.play(); }}>Ver entrada</button>
             <button className="ghost-button" aria-label={muted ? 'Activar audio' : 'Silenciar audio'} onClick={() => { if (muted) playerRef.current?.unmute(); else playerRef.current?.mute(); setMuted(!muted); }}>{muted ? <VolumeX size={15} /> : <Volume2 size={15} />}</button>
             <label>Vista <select aria-label="Zoom del lienzo" value={canvasZoom} onChange={(e) => setCanvasZoom(Number(e.target.value))}><option value={1}>Ajustar</option><option value={1.5}>150%</option><option value={2}>200%</option></select></label>
+            <label>Zona segura <select aria-label="Zona segura" value={safeZone} onChange={(e) => setSafeZone(e.target.value as SafeZone)}>{(Object.keys(safeZoneLabels) as SafeZone[]).map((id) => <option key={id} value={id}>{safeZoneLabels[id]}</option>)}</select></label>
             <span className="stage-format">{format.width} × {format.height}</span>
           </div>
           <div className="stage-viewport" ref={stageViewport}>
-          <div className={`stage-frame ratio-${format.id}`} style={{ width: Math.max(1, Math.min(stageSize.width - 32, (stageSize.height - 32) * format.width / format.height)) * canvasZoom, height: Math.max(1, Math.min(stageSize.height - 32, (stageSize.width - 32) * format.height / format.width)) * canvasZoom }}>
-            <Player
-              ref={playerRef}
-              component={TextComposition}
-              inputProps={inputProps}
-              durationInFrames={duration}
-              fps={30}
-              compositionWidth={format.width}
-              compositionHeight={format.height}
-              controls={false}
-              initialFrame={Math.min(30, duration - 1)}
-              loop
-              initiallyMuted
-              acknowledgeRemotionLicense
-              style={{ width: '100%', height: '100%' }}
-            />
-            <span className="safe-zone" aria-hidden="true" />
-            <CanvasOverlay
-              layers={layers}
-              activeId={activeLayer.id}
-              format={format}
-              currentFrame={currentFrame}
-              onEdit={(id) => { setActiveLayerId(id); setTool('texto'); setTimeout(() => panelBody.current?.querySelector('textarea.caption-input')?.scrollIntoView({ block: 'center' }), 0); setTimeout(() => (panelBody.current?.querySelector('textarea.caption-input') as HTMLTextAreaElement | null)?.focus(), 0); }}
-              onSelect={selectLayer}
-              onBeginInteraction={recordHistory}
-              onChange={(id, patch) => updateLayer(id, (layer) => ({ ...layer, ...patch }))}
-            />
-          </div>
+            <div className={`stage-frame ratio-${format.id}`} style={{ width: stageWidth, height: stageHeight }}>
+              <Player
+                ref={playerRef}
+                component={TextComposition}
+                inputProps={inputProps}
+                durationInFrames={duration}
+                fps={30}
+                compositionWidth={format.width}
+                compositionHeight={format.height}
+                controls={false}
+                initialFrame={Math.min(30, duration - 1)}
+                loop
+                initiallyMuted
+                acknowledgeRemotionLicense
+                style={{ width: '100%', height: '100%' }}
+              />
+              <span className="safe-zone" aria-hidden="true" />
+              <SafeZoneOverlay zone={safeZone} />
+              <CanvasOverlay
+                layers={layers}
+                activeId={activeLayer.id}
+                format={format}
+                currentFrame={currentFrame}
+                onEdit={(id) => { project.setActiveLayerId(id); setTool('texto'); setTimeout(() => panelBody.current?.querySelector('textarea.caption-input')?.scrollIntoView({ block: 'center' }), 0); setTimeout(() => (panelBody.current?.querySelector('textarea.caption-input') as HTMLTextAreaElement | null)?.focus(), 0); }}
+                onSelect={selectLayer}
+                onBeginInteraction={recordHistory}
+                onChange={(id, patch) => updateLayer(id, (layer) => ({ ...layer, ...patch }))}
+              />
+            </div>
+            {showEmpty && !guide && (
+              <EmptyState
+                onPickVideo={(file) => { setShowEmpty(false); setTool('video'); void pickGuide(file); }}
+                onWriteByHand={() => { setShowEmpty(false); setTool('texto'); }}
+              />
+            )}
           </div>
         </main>
 
@@ -700,6 +430,59 @@ export default function App() {
             <details className="workspace-options"><summary>Acomodar paneles</summary><label>Ancho del panel<input aria-label="Ancho del panel" type="range" min={300} max={520} value={panelWidth} onChange={(e) => setPanelWidth(Number(e.target.value))} /></label><label>Alto del timeline<input aria-label="Alto de la línea de tiempo" type="range" min={180} max={360} value={timelineHeight} onChange={(e) => setTimelineHeight(Number(e.target.value))} /></label></details>
           </header>
           <div className="panel-body" ref={panelBody}>
+            {tool === 'video' && (
+              <>
+                <GuidePanel
+                  guide={guide}
+                  upload={guideUpload}
+                  expectedName={guideName}
+                  formatLabel={format.label}
+                  onPick={(file) => void pickGuide(file)}
+                  onVolume={(volume) => setGuide((current) => current ? { ...current, volume } : current)}
+                  onRemove={removeGuide}
+                />
+                <AutoCaptionsPanel mediaId={guideMediaId} templateLayer={activeLayer} createId={createLayerId} onApply={applyAutoCaptions} />
+              </>
+            )}
+            {tool === 'subtitulos' && (
+              <SubtitlesPanel
+                layers={layers}
+                activeId={activeLayer.id}
+                currentFrame={currentFrame}
+                onSeek={seek}
+                onSelect={(id) => selectLayer(id)}
+                onText={(id, text) => updateLayer(id, (layer) => layer.locked ? layer : withText(layer, text))}
+                onMerge={project.mergeWithNext}
+                onDelete={project.deleteLayer}
+                countMatches={project.countMatches}
+                onReplaceAll={project.replaceInAll}
+                onImport={project.importCaptions}
+                onExport={project.downloadCaptions}
+                flashHint={flashHint}
+              />
+            )}
+            {tool === 'texto' && (
+              <>
+                <WordTimingPanel layer={activeLayer} frame={currentFrame} onSeek={seek} onChange={(wordTiming) => updateActive((l) => ({ ...l, wordTiming }))} />
+                <TextPanel
+                  key={activeLayer.id}
+                  text={activeLayer.text}
+                  typography={activeLayer.typography}
+                  keywords={activeLayer.keywords}
+                  positionX={activeLayer.positionX}
+                  positionY={activeLayer.positionY}
+                  onText={(text) => updateActive((layer) => withText(layer, text))}
+                  onTypography={(patch) => updateActive((layer) => ({ ...layer, typography: { ...layer.typography, ...patch } }))}
+                  onPosition={(patch) => updateActive((layer) => ({ ...layer, ...patch }))}
+                  onKeyword={(index) => updateActive((layer) => layer.keywords[index] ? layer : ({
+                    ...layer,
+                    keywords: { ...layer.keywords, [index]: { word: layer.text.split(/\s+/).filter(Boolean)[index], color: '#FFE94A', fontSizeScale: 1.06, fontWeight: 900 } },
+                  }))}
+                  onKeywordStyle={(index, patch) => updateActive((layer) => ({ ...layer, keywords: { ...layer.keywords, [index]: { ...layer.keywords[index], ...patch } as KeywordStyle } }))}
+                  onKeywordRemove={(index) => updateActive((layer) => { const keywords = { ...layer.keywords }; delete keywords[index]; return { ...layer, keywords }; })}
+                />
+              </>
+            )}
             {tool === 'estilo' && (
               <>
                 <details className="tuner template-picker"><summary>Combinaciones listas para usar</summary><div className="tuner-block template-list">
@@ -708,7 +491,7 @@ export default function App() {
                     {combo.custom && <button className="ghost-button tiny" aria-label={`Borrar la combinación ${combo.name}`} title="Borrar esta combinación" onClick={() => setCustomCombos((current) => current.filter((item) => item.id !== combo.id))}>×</button>}
                   </span>)}
                 </div></details>
-                <div className="control-row"><button className="ghost-button" onClick={applyStyleToAll}>Aplicar look a todas</button></div>
+                <div className="control-row"><button className="ghost-button" onClick={project.applyStyleToAll}>Aplicar look a todas</button></div>
                 <StyleGallery
                   styles={stylePresets}
                   typography={activeLayer.typography}
@@ -726,60 +509,23 @@ export default function App() {
             )}
             {tool === 'movimiento' && (
               <>
-              <MotionPanel
-                presets={presets}
-                animation={activeAnimation}
-                favorites={favorites}
-                mode={activeLayer.overrides.mode}
-                sampleWord={sampleWord}
-                layer={activeLayer}
-                onChooseIn={chooseInPreset}
-                onChangeAnimation={(animation) => updateActive((layer) => animation.in
-                  ? { ...layer, animation, preset: animation.in.preset, overrides: animation.in.overrides }
-                  : { ...layer, animation })}
-                onMode={setAnimationMode}
-                onFavorite={(id) => setFavorites((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])}
-                onDelete={deleteMotionPreset}
-                onLoop={(loop) => updateActive((layer) => ({ ...layer, animation: { ...animationForLayer(layer), loop } }))}
-              />
-              {advanced && <KeyframePanel layer={activeLayer} frame={currentFrame} onSeek={seek} onChange={(transformKeys) => updateActive((l) => ({ ...l, transformKeys }))} />}
-              </>
-            )}
-            {tool === 'texto' && (
-              <>
-              <WordTimingPanel layer={activeLayer} frame={currentFrame} onSeek={seek} onChange={(wordTiming) => updateActive((l) => ({ ...l, wordTiming }))} />
-              <CaptionTools onImport={importCaptions} currentFrame={currentFrame} onExport={downloadCaptions} />
-              <TextPanel
-                key={activeLayer.id}
-                text={activeLayer.text}
-                typography={activeLayer.typography}
-                keywords={activeLayer.keywords}
-                positionX={activeLayer.positionX}
-                positionY={activeLayer.positionY}
-                onText={(text) => updateActive((layer) => ({ ...layer, text, name: nameFor(text), wordTiming: text === layer.text || !layer.wordTiming ? layer.wordTiming : remapWordTiming(layer.text, text, layer.wordTiming, getLayerDuration(layer)), keywords: remapKeywords(layer.text, text, layer.keywords) }))}
-                onTypography={(patch) => updateActive((layer) => ({ ...layer, typography: { ...layer.typography, ...patch } }))}
-                onPosition={(patch) => updateActive((layer) => ({ ...layer, ...patch }))}
-                onKeyword={(index) => updateActive((layer) => layer.keywords[index] ? layer : ({
-                  ...layer,
-                  keywords: { ...layer.keywords, [index]: { word: layer.text.split(/\s+/).filter(Boolean)[index], color: '#FFE94A', fontSizeScale: 1.06, fontWeight: 900 } },
-                }))}
-                onKeywordStyle={(index, patch) => updateActive((layer) => ({ ...layer, keywords: { ...layer.keywords, [index]: { ...layer.keywords[index], ...patch } as KeywordStyle } }))}
-                onKeywordRemove={(index) => updateActive((layer) => { const keywords = { ...layer.keywords }; delete keywords[index]; return { ...layer, keywords }; })}
-              />
-              </>
-            )}
-            {tool === 'video' && (
-              <>
-              <GuidePanel
-                guide={guide}
-                upload={guideUpload}
-                expectedName={guideName}
-                formatLabel={format.label}
-                onPick={(file) => void pickGuide(file)}
-                onVolume={(volume) => setGuide((current) => current ? { ...current, volume } : current)}
-                onRemove={removeGuide}
-              />
-              <AutoCaptionsPanel mediaId={guideMediaId} templateLayer={activeLayer} createId={createLayerId} onApply={applyAutoCaptions} />
+                <MotionPanel
+                  presets={presets}
+                  animation={activeAnimation}
+                  favorites={favorites}
+                  mode={activeLayer.overrides.mode}
+                  sampleWord={sampleWord}
+                  layer={activeLayer}
+                  onChooseIn={chooseInPreset}
+                  onChangeAnimation={(animation) => updateActive((layer) => animation.in
+                    ? { ...layer, animation, preset: animation.in.preset, overrides: animation.in.overrides }
+                    : { ...layer, animation })}
+                  onMode={setAnimationMode}
+                  onFavorite={(id) => setFavorites((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])}
+                  onDelete={deleteMotionPreset}
+                  onLoop={(loop) => updateActive((layer) => ({ ...layer, animation: { ...animationForLayer(layer), loop } }))}
+                />
+                {advanced && <Suspense fallback={null}><KeyframePanel layer={activeLayer} frame={currentFrame} onSeek={seek} onChange={(transformKeys) => updateActive((l) => ({ ...l, transformKeys }))} /></Suspense>}
               </>
             )}
             {tool === 'salida' && (
@@ -811,7 +557,7 @@ export default function App() {
         duration={duration}
         currentFrame={currentFrame}
         selectedIds={selectedIds}
-        onSplit={splitLayer}
+        onSplit={() => project.splitLayer(currentFrame)}
         waveform={guide?.waveform}
         guideDuration={guide?.durationInFrames}
         canAdd={layers.length < MAX_LAYERS}
@@ -819,24 +565,26 @@ export default function App() {
         onSelect={selectLayer}
         onChange={(id, patch) => updateLayer(id, (layer) => ({ ...layer, ...patch }))}
         onBeginInteraction={recordHistory}
-        onAdd={addLayer}
-        onDuplicate={duplicateLayer}
-        onDelete={deleteLayer}
+        onAdd={project.addLayer}
+        onDuplicate={project.duplicateLayer}
+        onDelete={project.deleteLayer}
         onToggleVisible={(id) => updateLayer(id, (layer) => ({ ...layer, visible: !layer.visible }))}
         onToggleLock={(id) => updateLayer(id, (layer) => ({ ...layer, locked: !layer.locked }))}
       />
 
-      {libraryOpen && <LibraryPanel project={{ ...snapshot, activeLayerId, guideName, guideMediaId: guideMediaId || undefined }} layer={activeLayer} onClose={() => setLibraryOpen(false)}
-        onOpen={(p) => { const parsed = parseProjectFile(JSON.stringify(p)); if (!parsed) { flashHint('El proyecto guardado no es válido.'); return; } applyProjectState(parsed.layers, parsed.activeLayerId, parsed.background, parsed.customBackground, parsed.formatId, parsed.name); setGuideName(parsed.guideName ?? ''); if (parsed.guideMediaId) void relinkGuide(parsed.guideMediaId, parsed.guideName ?? ''); }}
-        onKit={(kit) => updateActive((l) => ({ ...l, typography: structuredClone(kit.typography), animation: cloneAnimation(kit.animation), preset: kit.animation.in?.preset ?? l.preset, overrides: kit.animation.in?.overrides ?? l.overrides }))} />}
-      {saveKind && (
-        <SavePresetModal
-          suggestedName={saveKind === 'style' ? 'Mi estilo' : `GB ${activeLayer.preset.name}`}
-          lockedKind={saveKind === 'style' ? 'style' : undefined}
-          onCancel={() => setSaveKind(null)}
-          onSave={savePreset}
-        />
-      )}
+      <Suspense fallback={null}>
+        {libraryOpen && <LibraryPanel project={project.projectState} layer={activeLayer} onClose={() => setLibraryOpen(false)}
+          onOpen={(p) => { const parsed = parseProjectFile(JSON.stringify(p)); if (!parsed) { flashHint('El proyecto guardado no es válido.'); return; } project.openParsed(parsed); }}
+          onKit={(kit) => updateActive((l) => ({ ...l, typography: structuredClone(kit.typography), animation: cloneAnimation(kit.animation), preset: kit.animation.in?.preset ?? l.preset, overrides: kit.animation.in?.overrides ?? l.overrides }))} />}
+        {saveKind && (
+          <SavePresetModal
+            suggestedName={saveKind === 'style' ? 'Mi estilo' : `GB ${activeLayer.preset.name}`}
+            lockedKind={saveKind === 'style' ? 'style' : undefined}
+            onCancel={() => setSaveKind(null)}
+            onSave={savePreset}
+          />
+        )}
+      </Suspense>
       <div className="toast" role="status" aria-live="polite">{hint && <span>{hint}</span>}</div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { Copy, Eye, EyeOff, Lock, LockOpen, Plus, Trash2, Wand2 } from 'lucide-react';
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { TextLayer } from '../types/motion';
 import { getLayerDuration, isAutoDuration } from '../utils/duration';
 import { animationForLayer, getSegmentTimelineDuration } from '../engine/layerAnimation';
@@ -37,6 +37,26 @@ export const TimelineDock = ({
   const lanesRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
   const [snap, setSnap] = useState(true);
+  // Con muchos subtítulos arranca en una sola pista; la persona puede volver a una fila por frase.
+  const [laneChoice, setLaneChoice] = useState<'lane' | 'rows' | null>(null);
+  const compact = (laneChoice ?? (layers.length > 12 ? 'lane' : 'rows')) === 'lane';
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState({ from: 0, to: 1 });
+  const readView = () => {
+    const el = scrollRef.current;
+    if (!el || el.scrollWidth <= 0) return;
+    const from = el.scrollLeft / el.scrollWidth;
+    const to = (el.scrollLeft + el.clientWidth) / el.scrollWidth;
+    setView((current) => Math.abs(current.from - from) < 0.002 && Math.abs(current.to - to) < 0.002 ? current : { from, to });
+  };
+  useEffect(readView, [zoom, compact, duration]);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(readView);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const lastFrame = Math.max(0, duration - 1);
   // Todo lo que se dibuja mapea un cuadro contra `span`, el mismo rango que
   // cubre el scrubber, así el cabezal cae exacto debajo del control.
@@ -115,6 +135,45 @@ export const TimelineDock = ({
     window.addEventListener('pointerup', finish, { once: true });
   };
 
+  /** Un clip con su arrastre, sus tiradores de entrada y salida y el borde para estirarlo. */
+  const renderClip = (layer: TextLayer) => {
+    const start = Math.max(0, layer.startFrame ?? 0);
+    const clipDuration = getLayerDuration(layer);
+    const left = start / span * 100;
+    const animation = animationForLayer(layer);
+    // Fracción del clip que ocupa cada tramo, para pintarlas adentro.
+    const inShare = Math.min(0.48, getSegmentTimelineDuration(animation.in, layer.text) / Math.max(1, clipDuration));
+    const outShare = Math.min(0.48, getSegmentTimelineDuration(animation.out, layer.text) / Math.max(1, clipDuration));
+    return (
+      <button
+        key={layer.id}
+        type="button"
+        className={`dock-clip ${layer.id === activeId ? 'is-active' : ''} ${layer.locked ? 'locked' : ''} ${isAutoDuration(layer) ? 'auto' : ''} ${layer.visible ? '' : 'hidden-layer'}`}
+        style={{ left: `${left}%`, width: `${Math.min(100 - left, Math.max(0.1, clipDuration / span * 100))}%` }}
+        onPointerDown={(event) => begin(event, layer, 'move')}
+        onClick={() => onSelect(layer.id)}
+        aria-label={`${layer.name}: empieza en ${clock(start)}, dura ${(clipDuration / 30).toFixed(1)} segundos${isAutoDuration(layer) ? ' (automático)' : ''}`}
+      >
+        {inShare > 0 && (
+          <b className="clip-fx in" style={{ width: `${inShare * 100}%` }} title={`Entrada: ${(getSegmentTimelineDuration(animation.in, layer.text) / 30).toFixed(1)} s`}>
+            <i role="slider" tabIndex={-1} aria-label="Cuánto tarda en entrar"
+              aria-valuenow={Math.round(getSegmentTimelineDuration(animation.in, layer.text))}
+              onPointerDown={(event) => beginFx(event, layer, 'in')} />
+          </b>
+        )}
+        {outShare > 0 && (
+          <b className="clip-fx out" style={{ width: `${outShare * 100}%` }} title={`Salida: ${(getSegmentTimelineDuration(animation.out, layer.text) / 30).toFixed(1)} s`}>
+            <i role="slider" tabIndex={-1} aria-label="Cuánto tarda en salir"
+              aria-valuenow={Math.round(getSegmentTimelineDuration(animation.out, layer.text))}
+              onPointerDown={(event) => beginFx(event, layer, 'out')} />
+          </b>
+        )}
+        <span>{layer.text.trim() || layer.name}</span>
+        <i className="clip-resize" aria-label="Cambiar cuánto dura" onPointerDown={(event) => begin(event, layer, 'resize')} />
+      </button>
+    );
+  };
+
   const activeLayer = layers.find((layer) => layer.id === activeId) ?? layers[0];
   const activeAuto = activeLayer ? isAutoDuration(activeLayer) : true;
 
@@ -125,6 +184,10 @@ export const TimelineDock = ({
         <output className="dock-clock">{clock(currentFrame)}<i>:{String(Math.floor(currentFrame % 30)).padStart(2, '0')}</i></output>
         <span className="dock-total">de {clock(duration)}</span>
         <div className="dock-head-actions">
+          <div className="segmented tiny" role="group" aria-label="Cómo se muestran las frases">
+            <button type="button" className={compact ? 'on' : ''} aria-pressed={compact} onClick={() => setLaneChoice('lane')}>Subtítulos</button>
+            <button type="button" className={compact ? '' : 'on'} aria-pressed={!compact} onClick={() => setLaneChoice('rows')}>Pistas</button>
+          </div>
           <button type="button" className="ghost-button tiny" aria-pressed={snap} onClick={() => setSnap(!snap)}>Imán {snap ? 'activo' : 'inactivo'}</button>
           <label className="timeline-zoom">Zoom <select aria-label="Zoom de la línea de tiempo" value={zoom} onChange={(e) => setZoom(Number(e.target.value))}>{[1, 2, 4, 8].map((z) => <option key={z} value={z}>{z}×</option>)}</select></label>
           <button type="button" className="ghost-button tiny" disabled={!canAdd || !activeLayer || activeLayer.locked || currentFrame <= activeLayer.startFrame || currentFrame >= activeLayer.startFrame + getLayerDuration(activeLayer) - 1} onClick={onSplit}>Dividir aquí</button>
@@ -139,7 +202,7 @@ export const TimelineDock = ({
         </div>
       </div>
 
-      <div className="timeline-scroll"><div className="timeline-content" style={{ width: `${zoom * 100}%` }}>
+      <div className="timeline-scroll" ref={scrollRef} onScroll={readView}><div className="timeline-content" style={{ width: `${zoom * 100}%` }}>
       <div className="dock-ruler" aria-hidden="true">
         {ticks.map((frame) => <span key={frame} style={{ left: `${frame / span * 100}%` }}>{clock(frame)}</span>)}
       </div>
@@ -162,15 +225,21 @@ export const TimelineDock = ({
         />
         <div className="dock-rows" ref={lanesRef}>
 
-          {layers.map((layer, index) => {
-            const start = Math.max(0, layer.startFrame ?? 0);
-            const clipDuration = getLayerDuration(layer);
-            const left = start / span * 100;
+          {compact ? (
+            <div className="dock-row lane-row">
+              <div className="dock-row-head"><span className="lane-title">Subtítulos</span><small className="lane-count">{layers.length}</small></div>
+              <div className="dock-lane">
+                <span className="dock-playhead" style={{ left: `${Math.min(currentFrame, lastFrame) / span * 100}%` }} aria-hidden="true" />
+                {layers.filter((layer) => {
+                  // Sólo se dibujan los clips que caen en lo que se ve (con un margen para el arrastre).
+                  const start = Math.max(0, layer.startFrame ?? 0) / span;
+                  const end = (Math.max(0, layer.startFrame ?? 0) + getLayerDuration(layer)) / span;
+                  return layer.id === activeId || (end >= view.from - 0.1 && start <= view.to + 0.1);
+                }).map((layer) => renderClip(layer))}
+              </div>
+            </div>
+          ) : layers.map((layer, index) => {
             const active = activeId === layer.id;
-            const animation = animationForLayer(layer);
-            // Fracción del clip que ocupa cada tramo, para pintarlas adentro.
-            const inShare = Math.min(0.48, getSegmentTimelineDuration(animation.in, layer.text) / Math.max(1, clipDuration));
-            const outShare = Math.min(0.48, getSegmentTimelineDuration(animation.out, layer.text) / Math.max(1, clipDuration));
             return (
               <div className={`dock-row ${active ? 'active' : ''} ${selectedIds.includes(layer.id) ? 'multi-selected' : ''}`} key={layer.id}>
                 <div className="dock-row-head">
@@ -191,31 +260,7 @@ export const TimelineDock = ({
                 </div>
                 <div className="dock-lane">
                   <span className="dock-playhead" style={{ left: `${Math.min(currentFrame, lastFrame) / span * 100}%` }} aria-hidden="true" />
-                  <button
-                    type="button"
-                    className={`dock-clip ${layer.locked ? 'locked' : ''} ${isAutoDuration(layer) ? 'auto' : ''} ${layer.visible ? '' : 'hidden-layer'}`}
-                    style={{ left: `${left}%`, width: `${Math.min(100 - left, Math.max(0.1, clipDuration / span * 100))}%` }}
-                    onPointerDown={(event) => begin(event, layer, 'move')}
-                    onClick={() => onSelect(layer.id)}
-                    aria-label={`${layer.name}: empieza en ${clock(start)}, dura ${(clipDuration / 30).toFixed(1)} segundos${isAutoDuration(layer) ? ' (automático)' : ''}`}
-                  >
-                    {inShare > 0 && (
-                      <b className="clip-fx in" style={{ width: `${inShare * 100}%` }} title={`Entrada: ${(getSegmentTimelineDuration(animation.in, layer.text) / 30).toFixed(1)} s`}>
-                        <i role="slider" tabIndex={-1} aria-label="Cuánto tarda en entrar"
-                          aria-valuenow={Math.round(getSegmentTimelineDuration(animation.in, layer.text))}
-                          onPointerDown={(event) => beginFx(event, layer, 'in')} />
-                      </b>
-                    )}
-                    {outShare > 0 && (
-                      <b className="clip-fx out" style={{ width: `${outShare * 100}%` }} title={`Salida: ${(getSegmentTimelineDuration(animation.out, layer.text) / 30).toFixed(1)} s`}>
-                        <i role="slider" tabIndex={-1} aria-label="Cuánto tarda en salir"
-                          aria-valuenow={Math.round(getSegmentTimelineDuration(animation.out, layer.text))}
-                          onPointerDown={(event) => beginFx(event, layer, 'out')} />
-                      </b>
-                    )}
-                    <span>{layer.text.trim() || layer.name}</span>
-                    <i className="clip-resize" aria-label="Cambiar cuánto dura" onPointerDown={(event) => begin(event, layer, 'resize')} />
-                  </button>
+                  {renderClip(layer)}
                 </div>
               </div>
             );

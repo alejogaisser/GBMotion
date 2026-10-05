@@ -1,0 +1,188 @@
+/* ============================== ESQUELETO ================================= */
+
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-rows: 50px minmax(0, 1fr) auto;
+}
+
+.workbench {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 362px;
+  /* La fila tiene que ser explícita: sin esto el lienzo no tiene contra qué
+     resolver su `height: 100%` y la proporción 9:16 lo estira sin límite. */
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* =============================== BARRA ==================================== */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.brand b { color: var(--text); }
+.brand-mark {
+  width: 27px; height: 27px;
+  display: grid; place-items: center;
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+}
+
+.topbar-group { display: flex; align-items: center; gap: 5px; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 7px; }
+
+.icon-button {
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.icon-button:hover { color: var(--text); border-color: var(--line-2); }
+.icon-button.on { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+
+.saved {
+  display: inline-flex; align-items: center; gap: 4px;
+  min-width: 76px;
+  font-size: 10px; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.saved.on { color: var(--go); }
+
+.button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  font-size: 12.5px; font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.button:hover:not(:disabled) { background: var(--surface-3); }
+.button:disabled { opacity: .45; cursor: not-allowed; }
+.button.primary { background: var(--go); border-color: transparent; color: #04150C; }
+.button.primary:hover:not(:disabled) { background: #3FE494; }
+.button.secondary { color: var(--text-2); }
+.button.block { width: 100%; margin-top: 8px; }
+
+.ghost-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 30px; padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.ghost-button:hover:not(:disabled) { color: var(--text); border-color: var(--line-2); }
+.ghost-button:disabled { opacity: .4; cursor: not-allowed; }
+.ghost-button.tiny { min-height: 26px; font-size: 11px; padding: 0 9px; }
+
+.linklike {
+  border: 0; background: none; padding: 0;
+  color: var(--accent); font-size: 12px; text-decoration: underline; cursor: pointer;
+}
+
+/* ========================= COLUMNA DE HERRAMIENTAS ======================== */
+
+.rail {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 8px 7px;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+}
+.rail button {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 9px 2px 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 9.5px; font-weight: 600; letter-spacing: .03em;
+  cursor: pointer;
+  transition: color .15s, background .15s;
+}
+.rail button:hover { color: var(--text-2); background: var(--surface-2); }
+.rail button.on { color: var(--text); background: var(--surface-3); border-color: var(--line); }
+.rail button.on svg { color: var(--accent); }
+
+/* ================================ LIENZO ================================== */
+
+.stage {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(91, 140, 255, .06), transparent 60%),
+    var(--bg);
+}
+
+.stage-frame {
+  position: relative;
+  /* Alto primero y ancho derivado de la proporción: así el video siempre entra
+     de punta a punta sin importar el alto de la ventana. */
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 20px 60px -22px rgba(0, 0, 0, .95), 0 0 0 1px var(--line);
+}
+.stage-frame.ratio-portrait { aspect-ratio: 9 / 16; }
+.stage-frame.ratio-square { aspect-ratio: 1; }
+.stage-frame.ratio-landscape { aspect-ratio: 16 / 9; width: 100%; height: auto; }
+
+.safe-zone {
+  position: absolute; inset: 8%;
+  border: 1px dashed rgba(255, 255, 255, .16);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+
+/* ============================ MENÚ «PROYECTO» ============================= */
+
+.project-menu { position: relative; }
+.project-menu-list {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 40;
+  display: grid; gap: 2px; min-width: 210px; padding: 6px;
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .45);
+}
+.project-menu-list button {
+  display: flex; align-items: center; gap: 9px; padding: 9px 10px;
+  border: 0; border-radius: 6px; background: transparent; color: var(--text);
+  font-size: 13px; text-align: left; cursor: pointer;
+}
+.project-menu-list button:hover { background: var(--surface-3); }
+.stage-toolbar select { max-width: 110px; }

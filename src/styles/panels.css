@@ -1,0 +1,220 @@
+/* ============================ PANEL DERECHO =============================== */
+
+.panel {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+}
+.panel-head { padding: 13px 15px 11px; border-bottom: 1px solid var(--line); }
+.panel-head h2 { font-size: 14px; }
+.panel-head p { margin-top: 3px; font-size: 11.5px; color: var(--text-3); line-height: 1.45; }
+.panel-body { overflow-y: auto; padding: 13px 15px 20px; }
+
+.panel-block { padding: 15px 0 0; }
+.panel-block:first-child { padding-top: 0; }
+.panel-block + .panel-block { margin-top: 15px; border-top: 1px solid var(--line); }
+.panel-block h3 {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--text-3);
+  margin-bottom: 9px;
+}
+.hint { font-size: 11.5px; color: var(--text-3); line-height: 1.5; margin-bottom: 9px; }
+.empty { grid-column: 1 / -1; font-size: 12px; color: var(--text-3); padding: 18px 0; text-align: center; }
+
+/* ========================= BUSCADOR Y CATEGORÍAS ========================== */
+
+.gallery-tools { display: flex; gap: 7px; margin-bottom: 10px; }
+
+.search {
+  flex: 1;
+  display: flex; align-items: center; gap: 7px;
+  padding: 0 10px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-3);
+}
+.search input {
+  flex: 1; min-width: 0;
+  border: 0; background: none; outline: none;
+  font-size: 12.5px; color: var(--text);
+}
+.search input::placeholder { color: var(--text-3); }
+.search:focus-within { border-color: var(--accent-line); }
+
+.chip-action {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 32px; padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chip-action:hover { color: var(--text); border-color: var(--line-2); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px; }
+.chips button {
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 11px; font-weight: 600;
+  cursor: pointer;
+  transition: color .15s, background .15s, border-color .15s;
+}
+.chips button:hover { color: var(--text-2); }
+.chips button.on { color: var(--text); background: var(--surface-3); border-color: var(--line-2); }
+
+/* ========================== GALERÍA DE ESTILOS ============================ */
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.style-card, .motion-card { position: relative; min-width: 0; }
+
+.style-card-frame {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  display: grid; place-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background-color: #14181F;
+  background-size: cover;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: center;
+  transition: border-color .15s, transform .15s;
+}
+.style-card-frame > span { max-width: 100%; word-break: break-word; }
+.style-card-frame:hover { border-color: var(--line-2); transform: translateY(-1px); }
+.style-card.on .style-card-frame { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+.style-card-name {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.style-card.on .style-card-name, .motion-card.on .style-card-name { color: var(--text); }
+
+.style-card-delete {
+  position: absolute; top: 5px; right: 5px;
+  width: 21px; height: 21px;
+  display: grid; place-items: center;
+  border: 0; border-radius: 6px;
+  background: rgba(10, 12, 16, .78);
+  color: var(--danger);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .15s;
+}
+.style-card:hover .style-card-delete,
+.style-card:focus-within .style-card-delete,
+.motion-card:hover .style-card-delete { opacity: 1; }
+
+/* ========================= GALERÍA DE MOVIMIENTO ========================== */
+
+.motion-grid { grid-template-columns: 1fr 1fr; }
+
+.motion-card-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  display: grid; place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: linear-gradient(160deg, #1D232E, #101319);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color .15s;
+}
+.motion-card-frame:hover { border-color: var(--line-2); }
+.motion-card.on .motion-card-frame { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+.motion-sample {
+  font-size: 15px; font-weight: 800; letter-spacing: -.02em;
+  color: var(--text);
+  max-width: 90%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.motion-tag {
+  position: absolute; left: 5px; bottom: 5px;
+  font-style: normal; font-size: 8.5px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase;
+  padding: 2px 5px; border-radius: 4px;
+  background: var(--accent-soft); color: var(--accent);
+}
+
+.motion-fav {
+  position: absolute; top: 5px; right: 5px;
+  width: 20px; height: 20px;
+  display: grid; place-items: center;
+  border: 0; border-radius: 5px;
+  background: rgba(10, 12, 16, .7);
+  color: var(--text-3);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .15s, color .15s;
+}
+.motion-card:hover .motion-fav, .motion-card:focus-within .motion-fav, .motion-fav.on { opacity: 1; }
+.motion-fav.on { color: #FFC53D; }
+
+/* Vista previa del efecto: una aproximación por familia. La versión exacta se
+   ve en el lienzo al aplicarlo, así que acá sólo hace falta transmitir el tipo. */
+.motion-card-frame:hover .motion-sample { animation: .75s cubic-bezier(.2, .9, .25, 1) both; }
+.anim-zoom:hover .motion-sample { animation-name: fx-zoom; }
+.anim-impact:hover .motion-sample { animation-name: fx-impact; }
+.anim-slide:hover .motion-sample { animation-name: fx-slide; }
+.anim-blur:hover .motion-sample { animation-name: fx-blur; }
+.anim-3d:hover .motion-sample { animation-name: fx-3d; }
+.anim-words:hover .motion-sample { animation-name: fx-words; }
+.anim-letters:hover .motion-sample { animation-name: fx-letters; }
+.anim-epic:hover .motion-sample { animation-name: fx-epic; }
+
+@keyframes fx-zoom { from { opacity: 0; transform: scale(2.4); } to { opacity: 1; transform: none; } }
+@keyframes fx-impact { 0% { opacity: 0; transform: scale(.4); } 60% { opacity: 1; transform: scale(1.14); } 100% { transform: none; } }
+@keyframes fx-slide { from { opacity: 0; transform: translateX(-70px); } to { opacity: 1; transform: none; } }
+@keyframes fx-blur { from { opacity: 0; filter: blur(11px); } to { opacity: 1; filter: none; } }
+@keyframes fx-3d { from { opacity: 0; transform: perspective(300px) rotateX(75deg); } to { opacity: 1; transform: none; } }
+@keyframes fx-words { 0% { opacity: 0; transform: translateY(22px); } 55% { opacity: 1; transform: translateY(-4px); } 100% { transform: none; } }
+@keyframes fx-letters { 0% { opacity: 0; letter-spacing: 16px; } 100% { opacity: 1; letter-spacing: -.02em; } }
+@keyframes fx-epic { 0% { opacity: 0; transform: translateY(46px) scale(.5) rotate(-9deg); } 70% { opacity: 1; transform: translateY(-5px) scale(1.08); } 100% { transform: none; } }
+
+
+/* ========================== SUBTÍTULOS (GUION) ============================ */
+
+.sub-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.sub-row {
+  /* Con cientos de filas, el navegador no pinta las que están fuera de la vista. */
+  content-visibility: auto; contain-intrinsic-size: auto 104px;
+  display: grid; gap: 5px; padding: 8px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+}
+.sub-row.active { border-color: var(--accent-line); background: var(--surface-2); }
+.sub-row.locked { opacity: .7; }
+.sub-time { display: inline-flex; align-items: center; gap: 7px; justify-self: start; font-size: 12px; font-variant-numeric: tabular-nums; }
+.sub-time b {
+  min-width: 22px; padding: 1px 6px; border-radius: 10px; background: var(--surface-3);
+  color: var(--text-2); font-size: 11px; text-align: center;
+}
+.sub-text {
+  width: 100%; min-height: 46px; resize: none; padding: 7px 9px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+  font-size: 13px; line-height: 1.35;
+}
+.sub-text:focus { border-color: var(--accent-line); outline: none; }
+.sub-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; }
+.subtitles-panel .control-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

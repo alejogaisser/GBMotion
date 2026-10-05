@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Star, Trash2 } from 'lucide-react';
 import type { AnimationMode, LayerAnimation, LoopAnimation, MotionPreset, PresetCategory, TextLayer } from '../types/motion';
-import { MotionPreview } from './MotionPreview';
 import { defaultLoop, loopKinds, loopLabels, loopHints } from '../engine/loopMotion';
 import { overridesFor } from '../remotion/defaults';
+
+// La vista previa real de cada efecto se baja recién cuando se abre.
+const MotionPreview = lazy(() => import('./MotionPreview').then((module) => ({ default: module.MotionPreview })));
 
 type Props = {
   presets: MotionPreset[];
@@ -210,7 +212,7 @@ export const MotionPanel = ({
                 onClick={() => choose(preset)}
               >
                 <span className="motion-sample">{sampleWord}</span>
-                {previewId === preset.id && <MotionPreview preset={preset} layer={layer} track={track} />}
+                {previewId === preset.id && <Suspense fallback={null}><MotionPreview preset={preset} layer={layer} track={track} /></Suspense>}
                 {reversed && <em className="motion-tag">al revés</em>}
                 {track === 'out' && preset.intent === 'out' && <em className="motion-tag go">salida</em>}
               </button>
