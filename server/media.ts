@@ -2,7 +2,7 @@ import { createReadStream, createWriteStream, existsSync, mkdirSync, statSync } 
 import { unlink } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
+import { resolve } from 'node:path';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { HttpError, json, parseRange } from './http.ts';
@@ -16,7 +16,7 @@ const MIME: Record<string, string> = { mp4: 'video/mp4', m4v: 'video/mp4', mov: 
 const UNREADABLE = 'No pude leer ese video. Probá con un MP4.';
 
 export const isMediaId = (value: unknown): value is string => typeof value === 'string' && MEDIA_ID.test(value);
-export const mediaPath = (mediaDir: string, mediaId: string) => join(mediaDir, mediaId);
+export const mediaPath = (mediaDir: string, mediaId: string) => resolve(mediaDir, mediaId);
 
 const decodeName = (header: string | string[] | undefined) => {
   const raw = Array.isArray(header) ? header[0] : header;

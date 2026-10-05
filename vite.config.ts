@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { gbMotionPlugin } from './server/plugin.ts';
@@ -8,8 +8,9 @@ export default defineConfig(({ mode }) => {
   // Las claves se leen sólo acá, en el servidor. Ninguna lleva el prefijo VITE_,
   // así que Vite nunca las mete en el código que baja al navegador.
   const env = loadEnv(mode, process.cwd(), '');
-  const mediaDir = env.GB_MEDIA_DIR
-    || (env.LOCALAPPDATA ? join(env.LOCALAPPDATA, 'gb-motion', 'media') : join(homedir(), '.gb-motion', 'media'));
+  // Siempre absoluta: ffmpeg corre con otra carpeta de trabajo y una ruta relativa no resolvería.
+  const mediaDir = resolve(process.cwd(), env.GB_MEDIA_DIR
+    || (env.LOCALAPPDATA ? join(env.LOCALAPPDATA, 'gb-motion', 'media') : join(homedir(), '.gb-motion', 'media')));
   return {
     plugins: [
       react(),

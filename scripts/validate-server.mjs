@@ -7,7 +7,8 @@ import { Readable } from 'node:stream';
 const { readBody, readJson, parseRange, isAllowedOrigin, HttpError } = await import('../server/http.ts');
 const { isSupportedFormat } = await import('../server/render.ts');
 const { mapProviderError, createTranscribeService, MISSING_KEY_MESSAGE } = await import('../server/transcribe.ts');
-const { isMediaId } = await import('../server/media.ts');
+const { isMediaId, mediaPath } = await import('../server/media.ts');
+const { isAbsolute } = await import('node:path');
 
 /* --- readBody: una ñ partida entre dos chunks (B3) --- */
 {
@@ -66,6 +67,7 @@ const { isMediaId } = await import('../server/media.ts');
 
 /* --- Ids de media --- */
 {
+  assert.equal(isAbsolute(mediaPath('tmp/qa/relmedia', '559708bc-9536-45a2-8d32-ccaef5cc351c.mp4')), true, 'relative media dir resolves to an absolute path');
   assert.equal(isMediaId('559708bc-9536-45a2-8d32-ccaef5cc351c.mp4'), true);
   assert.equal(isMediaId('../secret.mp4'), false);
   assert.equal(isMediaId('559708bc-9536-45a2-8d32-ccaef5cc351c.exe'), false);

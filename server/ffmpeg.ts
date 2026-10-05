@@ -46,7 +46,7 @@ export type ProbeResult = { durationSec: number; width: number; height: number; 
 type Stream = { codec_type?: string; width?: number; height?: number; duration?: string; side_data_list?: { rotation?: number }[]; tags?: { rotate?: string } };
 
 export const probe = async (file: string): Promise<ProbeResult> => {
-  const result = await run('ffprobe', ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file]);
+  const result = await run('ffprobe', ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', resolve(file)]);
   if (result.code !== 0) throw new Error('ffprobe no pudo leer el archivo');
   const data = JSON.parse(result.stdout) as { streams?: Stream[]; format?: { duration?: string } };
   const streams = data.streams ?? [];
@@ -70,6 +70,8 @@ export const probe = async (file: string): Promise<ProbeResult> => {
  * Si este ffmpeg no trae libmp3lame, cae a WAV.
  */
 export const extractAudio = async (file: string, outBase: string, signal?: AbortSignal): Promise<string> => {
+  file = resolve(file);
+  outBase = resolve(outBase);
   const mp3 = `${outBase}.mp3`;
   const first = await run('ffmpeg', ['-y', '-v', 'error', '-i', file, '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'libmp3lame', '-b:a', '64k', mp3], signal);
   if (first.code === 0) return mp3;
