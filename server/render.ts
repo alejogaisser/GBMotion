@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { rename, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import type { CompositionProps, VideoFormat } from '../src/types/motion.ts';
@@ -6,23 +7,18 @@ import { videoFormats } from '../src/types/motion.ts';
 import { HttpError } from './http.ts';
 import { probe } from './ffmpeg.ts';
 import { FPS, isMediaId, mediaPath } from './media.ts';
+import { pruneFinishedJobs } from './jobs.ts';
+import { validateRenderInput } from './renderInput.ts';
+export { isSupportedFormat } from './renderInput.ts';
 
-export type ExportKind = 'mp4' | 'green' | 'alpha' | 'burn';
+export type ExportKind = 'mp4' | 'green' | 'alpha' | 'alpha-webm' | 'burn';
 type JobStatus = 'rendering' | 'done' | 'error' | 'cancelled';
-type Job = { progress: number; status: JobStatus; url?: string; error?: string; cancel: () => void };
+type Job = { progress: number; status: JobStatus; url?: string; error?: string; cancel: () => void; createdAt: number; finishedAt?: number; active: boolean };
 
 export const BUSY_MESSAGE = 'Ya hay un video en proceso. Esperá a que termine o cancelalo.';
 export const NO_VIDEO_MESSAGE = 'Subí un video en «Video» para exportarlo con subtítulos.';
 
 /** Sólo los tamaños que ofrece la app: el id y las dos medidas tienen que coincidir. */
-export const isSupportedFormat = (value: unknown): value is VideoFormat => {
-  if (!value || typeof value !== 'object') return false;
-  const item = value as Record<string, unknown>;
-  return videoFormats.some((format) => format.id === item.id && format.width === item.width && format.height === item.height);
-};
-
-const record = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-
 type RenderOptions = { projectRoot: string; exportsDir: string; mediaDir: string; port: number };
 
 export const createRenderService = ({ projectRoot, exportsDir, mediaDir, port }: RenderOptions) => {
@@ -30,34 +26,45 @@ export const createRenderService = ({ projectRoot, exportsDir, mediaDir, port }:
   let bundlePromise: Promise<string> | undefined;
   const getBundle = () => bundlePromise ??= import('@remotion/bundler').then(({ bundle }) => bundle({ entryPoint: resolve(projectRoot, 'src/remotion/index.ts') }));
   const jobs = new Map<string, Job>();
-  const isBusy = () => [...jobs.values()].some((job) => job.status === 'rendering');
+  const pending = new Set<Promise<void>>();
+  let closed = false;
+  const isBusy = () => [...jobs.values()].some((job) => job.active);
 
   const run = async (jobId: string, props: CompositionProps, format: VideoFormat, kind: ExportKind) => {
     const job = jobs.get(jobId)!;
     const wasCancelled = () => job.status === 'cancelled';
+    let partial: string | undefined;
     try {
       const { makeCancelSignal, renderMedia, selectComposition } = await import('@remotion/renderer');
       const { cancelSignal, cancel } = makeCancelSignal();
       job.cancel = cancel;
       if (wasCancelled()) return;
       const serveUrl = await getBundle();
+      if (wasCancelled()) return;
       const base = await selectComposition({ serveUrl, id: 'GBMotion', inputProps: props as unknown as Record<string, unknown> });
+      if (wasCancelled()) return;
       const composition = { ...base, width: format.width, height: format.height };
-      const filename = `gb-motion-${kind}-${Date.now()}.${kind === 'alpha' ? 'mov' : 'mp4'}`;
+      const filename = `gb-motion-${kind}-${Date.now()}.${kind === 'alpha' ? 'mov' : kind === 'alpha-webm' ? 'webm' : 'mp4'}`;
+      partial = resolve(exportsDir, filename.replace(/\.(mp4|mov|webm)$/, `.partial-${jobId}.$1`));
       const common = {
         composition,
         serveUrl,
-        outputLocation: resolve(exportsDir, filename),
+        outputLocation: partial,
         inputProps: props as unknown as Record<string, unknown>,
         cancelSignal,
         // Sólo «Video con tus subtítulos» lleva audio; el resto sale sin pista de audio.
         muted: kind !== 'burn',
-        onProgress: ({ progress }: { progress: number }) => { job.progress = progress; },
+        onProgress: ({ progress }: { progress: number }) => { if (!wasCancelled()) job.progress = progress; },
       };
       await (kind === 'alpha'
         ? renderMedia({ ...common, codec: 'prores', proResProfile: '4444', pixelFormat: 'yuva444p10le', imageFormat: 'png' })
+        : kind === 'alpha-webm' ? renderMedia({ ...common, codec: 'vp9', pixelFormat: 'yuva420p', imageFormat: 'png' })
         : renderMedia({ ...common, codec: 'h264' }));
       if (!wasCancelled()) {
+        if (statSync(partial).size === 0) throw new Error('empty render');
+        const destination = resolve(exportsDir, filename);
+        await rename(partial, destination);
+        if (wasCancelled()) { await rm(destination, { force: true }); return; }
         job.status = 'done';
         job.progress = 1;
         job.url = `/exports/${filename}`;
@@ -66,24 +73,28 @@ export const createRenderService = ({ projectRoot, exportsDir, mediaDir, port }:
       bundlePromise = undefined;
       if (!wasCancelled()) {
         job.status = 'error';
-        job.error = error instanceof Error ? error.message : 'No se pudo crear el video.';
+        job.error = 'No pude crear el video. Revisá el proyecto y volvé a exportarlo.';
       }
+    } finally {
+      if (partial) await rm(partial, { force: true }).catch(() => {});
+      job.active = false;
+      job.finishedAt = Date.now();
     }
   };
 
   /** Valida el pedido, reserva el único lugar de render y lo lanza. Devuelve el id del trabajo. */
   const start = async (body: unknown): Promise<string> => {
-    if (!record(body) || !record(body.props) || !Array.isArray(body.props.layers)) throw new HttpError(400, 'Faltan los datos del video.');
-    const requested = body.format;
-    if (!isSupportedFormat(requested)) throw new HttpError(400, 'Ese tamaño de video no está disponible.');
+    const input = validateRenderInput(body);
+    if (closed) throw new HttpError(503, 'El servidor se está cerrando. Volvé a abrir GB Motion.');
+    const requested = input.format;
     const format = videoFormats.find((item) => item.id === requested.id)!;
-    const kind: ExportKind = body.kind === 'green' || body.kind === 'alpha' || body.kind === 'burn' ? body.kind : 'mp4';
-    const props = { ...body.props } as unknown as CompositionProps;
+    const kind = input.kind;
+    const props = input.props;
     delete props.guide;
 
     let burn: { mediaId: string; name: string; volume: number } | null = null;
     if (kind === 'burn') {
-      const media = record(body.media) ? body.media : null;
+      const media = input.media;
       if (!media || media.mediaId === undefined || media.mediaId === null || media.mediaId === '') throw new HttpError(400, NO_VIDEO_MESSAGE);
       if (!isMediaId(media.mediaId) || !existsSync(mediaPath(mediaDir, media.mediaId))) throw new HttpError(400, 'No encuentro ese video. Volvé a subirlo en «Video».');
       const volume = typeof media.volume === 'number' && Number.isFinite(media.volume) ? Math.min(1, Math.max(0, media.volume)) : 1;
@@ -91,8 +102,9 @@ export const createRenderService = ({ projectRoot, exportsDir, mediaDir, port }:
     }
 
     if (isBusy()) throw new HttpError(409, BUSY_MESSAGE);
+    pruneFinishedJobs(jobs);
     const jobId = randomUUID();
-    jobs.set(jobId, { progress: 0, status: 'rendering', cancel: () => {} });
+    jobs.set(jobId, { progress: 0, status: 'rendering', cancel: () => {}, createdAt: Date.now(), active: true });
     if (burn) {
       try {
         const info = await probe(mediaPath(mediaDir, burn.mediaId));
@@ -103,7 +115,9 @@ export const createRenderService = ({ projectRoot, exportsDir, mediaDir, port }:
         throw new HttpError(400, 'No pude leer ese video. Volvé a subirlo en «Video».');
       }
     }
-    void run(jobId, props, format, kind);
+    const task = run(jobId, props, format, kind);
+    pending.add(task);
+    void task.finally(() => pending.delete(task));
     return jobId;
   };
 
@@ -118,19 +132,20 @@ export const createRenderService = ({ projectRoot, exportsDir, mediaDir, port }:
   };
 
   const listExports = () => readdirSync(exportsDir)
-    .filter((name) => /^gb-motion-[a-z]+-\d+\.(mp4|mov)$/i.test(name))
+    .filter((name) => /^gb-motion-(mp4|green|alpha|alpha-webm|burn)-\d+\.(mp4|mov|webm)$/i.test(name) && statSync(resolve(exportsDir, name)).isFile() && statSync(resolve(exportsDir, name)).size > 0)
     .map((name) => ({ name, at: statSync(resolve(exportsDir, name)).mtimeMs }))
     .sort((a, b) => b.at - a.at)
     .slice(0, 12)
     .map((item) => ({ url: `/exports/${item.name}`, name: item.name, at: item.at }));
 
   const exportFile = (filename: string): string | null | undefined => {
-    if (!/^[a-z0-9-]+\.(mp4|mov)$/i.test(filename)) return undefined;
+    if (!/^gb-motion-(mp4|green|alpha|alpha-webm|burn)-\d+\.(mp4|mov|webm)$/i.test(filename)) return undefined;
     const location = resolve(exportsDir, filename);
-    return existsSync(location) ? location : null;
+    return existsSync(location) && statSync(location).isFile() && statSync(location).size > 0 ? location : null;
   };
 
   const invalidateBundle = () => { bundlePromise = undefined; };
 
-  return { start, status, cancel, listExports, exportFile, invalidateBundle };
+  const close = async () => { closed = true; for (const id of jobs.keys()) cancel(id); await Promise.allSettled([...pending]); };
+  return { start, status, cancel, listExports, exportFile, invalidateBundle, close };
 };

@@ -9,5 +9,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "server/**/*.ts", "src/captions/**/*.ts", "src/types/motion.ts"]
+  "include": ["vite.config.ts", "server/**/*.ts", "src/captions/**/*.ts", "src/engine/validation.ts", "src/engine/motionModel.ts", "src/utils/storage.ts", "src/types/motion.ts"]
 }
