@@ -87,19 +87,36 @@ Criterios:
   - dock en x=0, 1366 de ancho, bottom 768±1 y 220±1 de alto; `.dock-head` de ≤40 de alto.
   - `Exportar.right` ≤1358; los 6 botones del rail enteros en el viewport.
   - ningún `scrollWidth` mayor que su `clientWidth`.
-- AC7: El layout aguanta 1920×1080 y 1024×768. Check: lo mismo que AC6 en esos dos tamaños. Pass: a 1920×1080, panel de 360, `.stage-frame` de ≥720 de alto y dock de 220; a 1024×768, sin scroll horizontal en el documento ni en el topbar, Exportar entero, stage de ≥560 de ancho y el botón de biblioteca conserva el nombre accesible «Biblioteca».
+- AC7: El layout aguanta 1920×1080 y 1024×768. Check: lo mismo que AC6 en esos dos tamaños, con los tamaños por defecto (panel 360, timeline 220). Pass: a 1920×1080, panel de 360, `.stage-frame` de ≥720 de alto y dock de 220; a 1024×768, sin scroll horizontal en el documento ni en el topbar, Exportar entero, stage de ≥560 de ancho y el botón de biblioteca conserva el nombre accesible «Biblioteca». El mínimo de 560 rige sólo con los tamaños por defecto; los extremos de los resizers se prueban en AC8. La base desborda a 1024 (el parent midió documento/topbar ≈1214 px y Exportar terminando en ≈1200 px; evidencia de base, no del candidato): la rama tiene que cerrar ese desborde (ver §Pasos F1-A.1).
 - AC8: Los resizers funcionan con teclado y mouse. Check: CDP a 1366×768.
   - Separador «Ancho del panel»: llegar con Tab y leer `role`, `aria-orientation`, `aria-valuemin`/`max`/`now`; ArrowRight ×3, End, Home y arrastre de +100 px.
   - Separador «Alto de la línea de tiempo»: ArrowUp ×2, End, Home y arrastre de −60 px en Y.
   - Comparar `localStorage['gb-motion:project']` antes y después.
+  - (R4) En 1024×768 y 1366×768, combinar panel 300/520 con timeline 180/360 y recorrer Estilo y Efectos con Ajustes finos activos. Llegar a los últimos controles con el scroll propio del panel y restaurar los tamaños con Home/End.
 
-  Pass: `role="separator"` con orientación `vertical`/`horizontal` y límites 300–520 y 180–360. El panel pasa por 408 → 520 → 300 → 400 y el timeline por 252 → 360 → 180 → 240, siempre con `aria-valuenow` igual a la medida real. Ambos muestran foco amarillo visible y el autosave queda idéntico.
-- AC9: Las pistas y el cabezal único funcionan. Check: semilla + video de guía subido por la UI (Runtime, mp4 de prueba en `tmp/qa/`), modo «Pistas» y después «Subtítulos». Con el slider «Posición del video», seek con teclado a los frames 0, 45 y el último; poner «Inicio» de la frase 2 en 2 s (F=60), seek a 60 y arrastrar el clip 2 con el mouse. Pass:
+  Pass: `role="separator"` con orientación `vertical`/`horizontal` y límites 300–520 y 180–360. El panel pasa por 408 → 520 → 300 → 400 y el timeline por 252 → 360 → 180 → 240, siempre con `aria-valuenow` igual a la medida real. Ambos muestran foco amarillo visible y el autosave queda idéntico. (R4) En todas las combinaciones de extremos:
+  - no hay overflow horizontal del documento ni controles inalcanzables, y la barra de reproducción no tapa el visor;
+  - el panel tiene scroll propio y el proyecto no cambia;
+  - el visor se ajusta al espacio que queda, conservando «Zoom del lienzo», y Home/End restauran los tamaños.
+
+  El mínimo stage ≥560 de AC7 no se exige con panel 520.
+- AC9: Las pistas y el cabezal único funcionan. Check: semilla + video de guía subido por la UI (Runtime, mp4 de prueba en `tmp/qa/`), modo «Pistas» y después «Subtítulos». Con el slider «Posición del video», seek con teclado a los frames 0, 45 y el último; poner «Inicio» de la frase 2 en 2 s (F=60), seek a 60 y arrastrar el clip 2 con el mouse. Además (R2):
+  - Repetir con zoom 1× y 8×, en «Pistas» y en «Subtítulos». En 8×, hacer scroll horizontal hasta el clip 2 y comprobar el seek al frame 60. Medir cabezal, regla y borde del clip en coordenadas de viewport.
+  - Probar mover, cambiar la duración (borde derecho), el tirador de entrada y el de salida, con Ctrl+Z después de cada interacción.
+  - Repetir esos arrastres con la frase 2 bloqueada.
+  - Con más de 12 frases, comprobar el scroll vertical y los encabezados sticky.
+
+  Pass:
   - Se ven los encabezados `T1`, `T2`, `T3`, `V1` y `A1` (incluido el `::before`).
   - Hay exactamente un `.dock-playhead`, de color `rgb(214, 255, 75)`, y va de la regla hasta el fondo de A1.
   - En F, el centro del cabezal queda a ±2 px del borde izquierdo del clip 2. Tras el arrastre cambia «Inicio».
   - Con scroll vertical de las frases, la regla y V1/A1 siguen visibles (sticky).
   - Los nombres accesibles de las filas y los clips coinciden con base (AC15).
+  - (R2) La alineación es ≤2 px en todas las combinaciones, también después del scroll horizontal. El desplazamiento medido se convierte a frames con el ancho real del lane y el redondeo del código existente.
+  - (R2) El resize y los tiradores actualizan su duración correspondiente (`durationFrames`, `animation.in/out.overrides.duration`) y Ctrl+Z restituye los valores anteriores.
+  - (R2) Arrastrar la frase bloqueada no cambia el proyecto ni el tiempo.
+  - (R2) El scroll horizontal queda dentro de `.timeline-scroll`, sin ampliar el documento.
+  - V1/A1 siguen fuera de `lanesRef`. No se toca el cálculo de frames para compensar un offset CSS.
 - AC10: La barra de reproducción funciona. Check: CDP con el slider en el frame 45; leer `.viewer-time` y el total; «Reproducir», esperar 1 s y «Pausar»; Espacio con foco en `body`; «Ver entrada» con la frase 3 activa; botón de audio. Pass:
   - `.viewer-time` muestra `00:00:01:15` y el total es `formatTimecode(duración)`.
   - Reproducir/Pausar alterna su nombre, el tiempo avanza y Espacio también alterna.
@@ -117,11 +134,21 @@ Criterios:
   8. Exportar → «Subtítulos .srt» y «.vtt».
   9. Proyecto → «Descargar proyecto».
 
-  Pass: el `localStorage['gb-motion:project']` final y los `.srt`, `.vtt` y `.json` descargados son byte-idénticos entre base y rama (normalizando campos de fecha si existen), con 0 errores en la consola de la rama.
+  Pass (R1; los IDs salen de `crypto.randomUUID()` en `useProject.ts:11`, así que no pueden coincidir entre corridas):
+  - Los `.srt` y `.vtt` son byte-idénticos entre base y rama.
+  - El autosave y el `.json` son estructuralmente idénticos después de parsearlos, normalizar sólo las fechas declaradas y canonicalizar los IDs. Cada corrida mapea los IDs de sus capas, en orden estable de aparición, a `layer-1`, `layer-2`… y aplica ese mismo mapa a todas las referencias de capa (selección, activa, etc.).
+  - No se normalizan texto, tiempos, orden, selección, visibilidad, bloqueos, presets ni overrides. Un ID o una referencia que no se puede mapear hace fallar la prueba.
+  - Se guardan los artefactos originales y los comparados, y la consola de la rama tiene 0 errores.
+  - No se modifica `useProject` ni la generación de IDs para facilitar el test.
 - AC12: Los ACs previos del editor siguen en pie. Check: re-ejecutar sobre la rama LP-AC3, LP-AC7, LP-AC10 (parte UI), LP-AC15, LP-AC20, LP-AC22, LP-AC23 (parte UI), LP-AC24, LP-AC25, LP-AC26, LP-AC32 y LP-AC36, tal como están en `docs/plan-landing-pro.md`. Pass: todos PASS; los BLOCKED históricos se declaran igual.
 - AC13: El motion respeta reduced-motion. Check: CDP con `prefers-reduced-motion: reduce`: cargar, recorrer las 6 herramientas, abrir y cerrar Proyecto, hover en botones y tarjetas, provocar un toast e iniciar un export verde corto (Runtime); 300 ms después de cada acción contar `document.getAnimations().length`. Sin emulación: 10 s de reposo después de cargar, y después durante un export. Además, `rg -n "animation(-name)?\s*:" src/styles` y revisar cada línea. Pass: 0 animaciones en todos los conteos con `reduce`; sin emulación, 0 animaciones con `iterations === Infinity` en reposo; durante el export, el REC del wordmark tiene `iterations ≤ 3`; toda declaración `animation` está dentro de `no-preference`.
 - AC14: El contraste cumple AA. Check: `tmp/qa/editor-redesign/contrast.mjs` (CDP, 1366×768) sobre el recorrido y sobre los estados sin servidor, export con error y frase bloqueada. Para cada nodo de texto visible fuera de las muestras, sin `disabled`/`aria-disabled` en sus ancestros ni `aria-hidden`, compara el color con el fondo efectivo: el primer ancestro con `background-color` no transparente, con su alfa compuesta sobre `--negro`. Pass: 0 pares por debajo de 4,5:1 (3:1 si mide ≥24 px, o ≥18,66 px con peso 700); el reporte incluye la tabla de §Tokens con los ratios.
-- AC15: Se conservan el foco y los nombres accesibles. Check: `Accessibility.getFullAXTree` en cada vista del recorrido, en base y en rama, con los nombres de los roles button, link, textbox, combobox, slider, checkbox, separator, tab, menuitem y spinbutton; en la rama, Tab ×40 desde el inicio leyendo outline/box-shadow de `document.activeElement`. Pass: todo nombre de base existe en la rama, salvo `← GB Motion`, que pasa a `GB Motion, inicio`; los nombres nuevos son sólo los de §Copy; cada elemento enfocado muestra un outline sólido ≥2 px de `rgb(255, 233, 74)` o, en clips sobre hueso o lima, un indicador ≥2 px con ≥3:1 contra el clip.
+- AC15: Se conservan el foco y los nombres accesibles. Check: `Accessibility.getFullAXTree` en cada vista del recorrido, en base y en rama, con los nombres de los roles button, link, textbox, combobox, slider, checkbox, separator, tab, menuitem y spinbutton; en la rama, Tab ×40 desde el inicio leyendo outline/box-shadow de `document.activeElement`. Pass (R5): se comparan pares rol/nombre accesible y sólo se admiten las excepciones declaradas, que el reporte enumera:
+  - el link `← GB Motion` pasa a `GB Motion, inicio`;
+  - los sliders «Ancho del panel» y «Alto de la línea de tiempo» pasan a separadores con el mismo nombre (su semántica la verifica AC8);
+  - si el árbol AX de la base expone el `summary` «Acomodar paneles» como button, su retiro es una excepción aprobada (el plan elimina ese `details`).
+
+  Todo otro par de base existe en la rama y los pares nuevos son sólo los de §Copy. Además, cada elemento enfocado muestra un outline sólido ≥2 px de `rgb(255, 233, 74)` o, en clips sobre hueso o lima, un indicador ≥2 px con ≥3:1 contra el clip.
 - AC16: El tiempo de carga no empeora más de 10 %. Check: Runtime de base y de rama, en serie en 4184; CDP con perfil limpio, sin caché y a 1366×768; 7 cargas de `/editor/` por lado midiendo `loadEventEnd`, `t_ready` (momento en que existen `.rail` y `.dock` y ya resolvió `document.fonts.ready`) y los bytes transferidos de CSS y JS; además `gzip -9` del CSS y del JS inicial que referencia `dist/editor/index.html`. Pass: medianas de la rama ≤ base × 1,10 en `loadEventEnd` y `t_ready`; CSS gzip ≤ base + 6 KB; JS inicial gzip ≤ base + 3 KB; el reporte trae los números.
 - AC17: El preview mantiene sus FPS y nada filtra el lienzo. Check:
   - Con la semilla, reproducir 5 s en base y en rama (3 corridas por lado), contando los `frameupdate` del Player y los frames de `requestAnimationFrame`.
@@ -136,12 +163,25 @@ Criterios:
   - (b) Bloquear `/api/render` con 503 por CDP y exportar.
   - (c) STT mock en curso (Runtime con mock).
   - (d) Frase bloqueada activa en Texto.
+  - (e, R3) A 1024×768 y a 1366×768, con un nombre de proyecto de 80 caracteres, probar por separado tres estados:
+    - servidor listo, con «Guardando…» y «Guardado»;
+    - modo navegador con su motivo y «Reintentar»;
+    - STT mock retenido en progreso mientras se alterna Video → Texto → Estilo.
+
+    No se exige que STT activo y modo sin servidor coexistan.
+  - (f, R3) Export activo (Runtime, mock o render retenido) y pasar a Texto: llegar a cancelarlo sin volver a Exportar.
 
   Pass:
   - (a) «Modo navegador», su motivo y «Reintentar» quedan visibles dentro del header (`right` ≤ viewport), el header mide 48±1 de alto y no hay scroll horizontal.
   - (b) `.export-status.error` con borde y texto en `--danger`, contraste ≥4,5.
   - (c) El chip de tarea muestra «Cancelar» y el header sigue en una sola fila (48±1).
   - (d) El clip bloqueado tiene patrón rayado y conserva el nombre accesible de base.
+  - (e) En cada estado y tamaño:
+    - el header mide 48±1 de alto, sin superposiciones (los rects de los grupos izquierdo, centro y derecho no se cruzan) y sin scroll horizontal;
+    - Proyecto, Biblioteca, Exportar y el Cancelar del STT se alcanzan con teclado y con pointer;
+    - el nombre se trunca a la vista, pero el `value` del input conserva los 80 caracteres;
+    - el motivo y «Reintentar» del modo navegador siguen visibles.
+  - (f) «Cancelar exportación» en el chip del header llama al mismo `cancelExport` que el botón del panel Exportar y produce el mismo estado. Cambiar de herramienta no inicia una segunda tarea ni cancela el export.
 - AC21: El estado vacío y los diálogos tienen la identidad nueva. Check: Proyecto → «Empezar de nuevo» y aceptar; leer `.empty-state`; con ajustes finos, abrir «Guardar en mi biblioteca», «Biblioteca» y un `#estilo=` válido con proyecto existente (HandoffDialog); cerrar cada uno con Cancelar/Cerrar. Pass: `.empty-state h2` computa `Anton` y su `em` computa `Instrument Serif` itálica; «Elegir un video» tiene fondo `rgb(214, 255, 75)`; `.modal-backdrop` tiene `backdrop-filter: none` y alfa ≥0,8; `.modal` tiene `border-radius` ≤2px; cada diálogo cierra igual que en base y el autosave no cambia.
 - AC22: Hay capturas para Alejo. Check: capturas a 1366×768 y 1920×1080 de las 6 herramientas con la semilla, del estado vacío y del modo navegador en `tmp/qa/editor-redesign/shots/`. Pass: existen las 16 capturas y el reporte las enumera. La revisión visual de Alejo es el gate humano.
 
@@ -166,10 +206,10 @@ Criterios:
   - `TimelineDock` Props: `+ guideName?: string`.
 
 ## Dirección de arte
-- **Header** (48 px, `--negro`, borde inferior `--line-2`; grid `auto 1fr auto`):
+- **Header** (48 px, `--negro`, borde inferior `--line-2`; grid `auto minmax(0,1fr) auto`, para que el centro se encoja y no desborde):
   - Izquierda: wordmark Anton 20 px «GB MOTION» con punto REC de 8 px. Es un link a `/` con nombre «GB Motion, inicio» y title «Volver a la página de GB Motion». Con `.is-rec` (export o STT en curso) el punto parpadea 3 veces y queda fijo. Siguen un divisor de 1 px, «Proyecto» (ghost + `ChevronDown` 14) y Deshacer/Rehacer (32×32).
   - Centro: nombre del proyecto en Archivo 700 14 px, centrado, máx. 280 px, con borde `--line-2` en hover/foco. Al lado, el estado en mono 11 px mayúsculas con punto: lima «Guardado», `--text-3` «Guardando…», `--danger` «Sin guardar» (mismos textos; bajo 1180 px el texto pasa a `.sr-only`).
-  - Derecha: chip STT (mono 12, punto REC, «Cancelar»); `ServerStatus` como chip de 2 px (punto lima listo, `--danger` sin servidor); «Biblioteca» con ícono `Library` (sólo ícono bajo 1280, con `aria-label="Biblioteca"`); Ajustes finos (lima si está activo); Guardar en biblioteca; y «Exportar» primario lima de 36 px con ícono `Download` y empujoncito al hover.
+  - Derecha: chip STT (mono 12, punto REC, «Cancelar»); chip de export mientras `exportState.status === 'rendering'` (R3): mono 12, punto REC, `Video <n> %` y botón «Cancelar exportación», que llama al `cancelExport` existente (otra entrada a la misma función, sin lógica nueva); `ServerStatus` como chip de 2 px (punto lima listo, `--danger` sin servidor); «Biblioteca» con ícono `Library` (sólo ícono bajo 1280, con `aria-label="Biblioteca"`); Ajustes finos (lima si está activo); Guardar en biblioteca; y «Exportar» primario lima de 36 px con ícono `Download` y empujoncito al hover.
 - **Rail** (64 px, `--negro`, borde derecho `--line`): botones de 56×56, ícono 20 y etiqueta Archivo 700 11 px en `--text-2`. El activo lleva fondo `--surface-2`, texto hueso, ícono lima y barra lima de 3 px a la izquierda (`::before`, `scaleY` en `steps(3)`). Orden y nombres según 0006.
 - **Panel** (`--surface` #1A1A17, borde derecho `--line-2`, resizer de 6 px sobre ese borde):
   - Encabezado: eyebrow mono 11 en `--text-2` (`T2 · Frase 2`, `V1 · <video>`/`V1 · Sin video`, `3 frases`, `1080 × 1920 · 30 fps`), h2 Anton 22 px en mayúsculas, hint 12 px en `--text-3` y tira de acciones ghost tiny (copiar/pegar y selección múltiple, sin cambios).
@@ -253,6 +293,7 @@ Escala tipográfica: 11 (mono, regla, etiquetas), 12 (hints, tiny), 13 (controle
 - Eyebrows: `T<n> · <nombre>`, `V1 · <video>`, `V1 · Sin video`, `<n> frases`, `<ancho> × <alto> · 30 fps`.
 - Encabezados: `V1 · Video` y `A1 · Audio`.
 - Estado vacío «Subí tu video» con «video» en serif (mismas palabras) y pasos `01`, `02`, `03`.
+- Chip de export (R3): `Video <n> %` y «Cancelar exportación».
 
 ## Riesgos y casos borde
 - **Memoria muscular:** Alejo puede extrañar el panel a la derecha. Volver atrás es reversible (grid + orden del DOM), queda como pregunta abierta 1.
@@ -287,7 +328,16 @@ Un commit por fase con hash anunciado (0005). Baseline antes de tocar nada: el t
 7. Build + 9 validadores, commit y anunciar el hash. Desde acá, A y B en paralelo.
 
 **F1-A · Shell** (coder A; archivos: `src/App.tsx`, `src/components/Resizer.tsx`, `src/components/EmptyState.tsx`, `src/components/LibraryPanel.tsx`, `src/styles/{layout,modal,canvas}.css`):
-1. Header: reemplazar `back-link` + `brand` por el wordmark. Grupos `.topbar-left`/`-center`/`-right`. Punto + `.saved-label`. «Biblioteca» con ícono y `aria-label`. Exportar con `Download`. `.is-rec` cuando `exportState.status === 'rendering' || transcription.running`.
+1. Header: reemplazar `back-link` + `brand` por el wordmark. Grupos `.topbar-left`/`-center`/`-right`. Punto + `.saved-label`. «Biblioteca» con ícono y `aria-label`. Exportar con `Download`. `.is-rec` cuando `exportState.status === 'rendering' || transcription.running`. Chip de export con «Cancelar exportación» → `cancelExport` (R3).
+
+   Presupuesto a 1024 (R3/R4; la base mide ≈1214 px):
+   - topbar `grid-template-columns: auto minmax(0,1fr) auto` y `overflow: hidden` sólo en el grupo central;
+   - nombre del proyecto `width: clamp(96px, 22vw, 280px); min-width: 0; text-overflow: ellipsis` (el `value` no se toca);
+   - bajo 1180 px, el texto de guardado pasa a `.sr-only` y la etiqueta de `ServerStatus` en estado listo se trunca con ellipsis a 200 px como máximo (en modo navegador, la etiqueta, el motivo y «Reintentar» quedan visibles);
+   - bajo 1280 px, Biblioteca queda sólo con el ícono;
+   - los chips de STT y export, bajo 1180 px, muestran sólo punto + «Cancelar».
+
+   Ningún hijo del header puede envolver a una segunda fila.
 2. Workbench en orden `nav.rail`, `aside.panel`, `main.stage`, con grid `var(--rail-w) var(--panel-width) minmax(0,1fr)` y `aside` en `position: relative`. `<Resizer label="Ancho del panel" orientation="vertical" min={300} max={520}>` como último hijo del aside, con hit de 6 px sobre el borde. `<Resizer label="Alto de la línea de tiempo" orientation="horizontal" invert min={180} max={360}>` entre el workbench y `TimelineDock`, sin sumar alto (AC6: dock de 220). Borrar `details.workspace-options`.
 3. Encabezado del panel: `<p className="panel-eyebrow">` con el texto según la herramienta (§Dirección de arte). Mantener `selection-tools` y `appearance-actions` con los mismos handlers.
 4. Visor: borrar `.stage-toolbar` y crear `.viewer-bar` debajo de `.stage-viewport`. Los botones, selects y handlers se mueven tal cual; se suman `.viewer-time` (`formatTimecode(currentFrame)`) y el total (`formatTimecode(duration)`).
@@ -324,5 +374,13 @@ En paralelo sólo F1-A ∥ F1-B, con archivos disjuntos y primitivas y tokens co
   - Primitivas de marca en `src/brand/tokens.css` (sólo custom properties), importadas por la landing y el editor; el editor mapea sus tokens semánticos sobre ellas. Complementa 0007.
   - Layout del editor: rail + panel contiguos a la izquierda, barra de reproducción bajo el visor, timeline a todo el ancho con pistas T/V/A y cabezal único. Actualiza la parte de layout de 0006 (el orden del rail no cambia).
 - Lecciones candidatas:
-  - Para probar «sin cambio de comportamiento» en un rediseño visual, correr el mismo script CDP guiado por roles y nombres accesibles contra base y rama, y comparar el autosave y los archivos exportados.
+  - Para probar «sin cambio de comportamiento» en un rediseño visual, correr el mismo script CDP guiado por roles y nombres accesibles contra base y rama, y comparar el autosave y los archivos exportados con los IDs aleatorios canonicalizados (`layer-1`…), nunca byte a byte.
   - `content: 'T' / ''` agrega prefijos visuales sin cambiar el nombre accesible.
+
+## Revisions
+- **2026-10-11 · Revisión Codex (`Notas/Revision-editor-codex.md`, sobre ec3ba2c).** Edición dirigida: se conservan los IDs AC1–AC22 y no hay ACs nuevos.
+  - R1: el Pass de AC11 compara SRT/VTT por bytes y el autosave/JSON de forma estructural, con IDs de capa canonicalizados (`layer-1`…) en todas sus referencias, porque `useProject` usa `randomUUID`.
+  - R2: AC9 suma zoom 1×/8×, scroll horizontal y vertical, resize, tiradores de entrada/salida, undo después de cada uno, y arrastres sobre una frase bloqueada.
+  - R3: AC20 suma los casos (e) nombre de 80 caracteres a 1024/1366 con servidor listo, modo navegador y STT retenido, y (f) cancelar un export activo desde otra herramienta. Para cumplir (f), el header suma un chip de export con «Cancelar exportación» que reusa `cancelExport` (otra entrada a la misma función). F1-A.1 suma un presupuesto de header a 1024 (`minmax(0,1fr)`, nombre con `clamp` y ellipsis, `.sr-only` bajo 1180) y §Copy suma el chip.
+  - R4: AC7 aclara que stage ≥560 rige sólo con los tamaños por defecto y registra el desborde de base a 1024 (≈1214 px) que la rama debe cerrar. AC8 suma combinaciones de extremos a 1024 y 1366, sin overflow, con scroll propio del panel y restauración con Home/End.
+  - R5: AC15 compara pares rol/nombre con excepciones declaradas: el link del wordmark, los sliders de tamaño que pasan a separadores con el mismo nombre y el retiro del `summary` «Acomodar paneles» si la base lo expone como button.
