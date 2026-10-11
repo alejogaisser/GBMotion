@@ -1,434 +1,197 @@
 <!-- dev-team plan -->
-# GB Motion: redesign, fixes, AI auto-subtitles and burned-in export
+# GB Motion · Corrida 3 (B2): landing «Sala de edición», editor en `/editor/`, runtime local y fiabilidad
+
+Plan único acordado Claude + Codex. Autor: architect de Claude. Revisor: Codex parent. Fuentes vinculantes: B1 `Comparacion-architects.md` (incluida «Respuesta de Codex»), A1, A2 + `plan-product-codex.md` (AC1–17 con IDs fijos, contratos y R2–R5), A3 `Auditoria-funcionalidades.md`, A4 `scout.md`, `Contraste-content-codex.md`. Plan histórico de corridas 1–2: `docs/plan-corrida-1-2.md`. Sin coder hasta: plan guardado + revisión Codex + OK de Alejo.
 
 ## Handoff
 
 ### Goal
-GB Motion becomes a full subtitle tool in Spanish. You upload a video, AI transcribes it with word timings, and every caption picks up your own styles, effects and word highlighting. You then export either the green MP4 for CapCut or the final video with the subtitles burned in. Every existing feature stays, and the known bugs are fixed.
+Alejo obtiene una landing pública propia en `/` (HTML real, visible sin JS) donde el visitante escribe su frase y la ve animada con el motor real de GB Motion, y el editor actual pasa a `/editor/` sin perder nada. GB Motion corre en producción local sin Vite (`npm start`), degrada con motivo visible cuando no hay servidor, y quedan corregidas las carreras de video/STT/export, los exports parciales, el 413 y la validación de render; se suman revisión de legibilidad, plantillas con nombre, SRT/VTT en Exportar y compartir estilo por enlace.
 
 ### Context
-- `src/App.tsx`: all editor state, export (`exportVideo`), guide-video logic, presets, captions import, split, undo. Most behavior changes start here.
-- `vite.config.ts`: dev-server middleware `/api/render`, `/api/exports`, `/exports/*`. The render runs as a job with progress and cancel.
-- `src/remotion/TextComposition.tsx`, `Root.tsx`: the composition shared by the Player and the Renderer, plus the guide `<Video>`.
-- `src/engine/textPaint.ts`: the paint rules (lessons below). `textLayout.ts` is the auto-fit heuristic. `layerAnimation.ts` holds the in/hold/out phases.
-- `src/utils/{editor,project,subtitles,storage}.ts`: MAX_LAYERS, history, keyword remap, project sanitizing, SRT/VTT, combo storage (currently unused).
-- `src/components/*`: GuidePanel, OutputPanel, WordTimingPanel, TimelineDock, CanvasOverlay, MotionPanel, StyleGallery/Tuner, TextPanel, CaptionTools, LibraryPanel, SavePresetModal, KeyframePanel, FontBrowser.
-- `scripts/validate-*.mjs`, `scripts/render-editor-smoke.mjs`: the existing tests and the smoke render.
-- `docs/V2_AUDIT.md`, `REVISION_2026-09-02.md`, `MEJORAS_2026-09-09.md`, `FASE_7.md`: earlier audits and open items.
-- `node_modules/.pnpm/@remotion+compositor-win32-x64-msvc@4.0.518/node_modules/@remotion/compositor-win32-x64-msvc/{ffmpeg,ffprobe}.exe`: the bundled ffmpeg.
-- Docs: Remotion OffthreadVideo https://www.remotion.dev/docs/offthreadvideo · ElevenLabs STT https://elevenlabs.io/docs/api-reference/speech-to-text/convert · Groq STT https://console.groq.com/docs/speech-to-text · Vite env https://vite.dev/config/#using-environment-variables-in-config
+- `index.html`, `src/main.tsx`, `src/styles/tokens.css:31,40-41`: entrada única hoy; `main.tsx` importa `./fonts` (51 familias) y `./styles.css`; `body{overflow:hidden}` e Inter globales. Con MPA quedan sólo en el editor.
+- `vite.config.ts`: `appType` por defecto, `rollupOptions.output.manualChunks` (chunk `remotion`), `server.port 4173`. Docs Vite MPA hablan de `rolldownOptions.input` (Vite 8): https://vite.dev/guide/build#multi-page-app
+- `server/plugin.ts:17-97`: todo el dispatch vive en `configureServer` (A3-R1: `/api/health` en dev devuelve HTML 200). `server/http.ts:32-36`: `req.destroy()` antes de responder 413 (A3-R3).
+- `server/render.ts:32,46,80,120`: `jobs` sin poda, filename final escrito durante el render, `listExports` sin estado, `start` acepta `layers:[{}]` (A3-R4).
+- `src/hooks/useTranscription.ts` invocado dentro de `src/components/AutoCaptionsPanel.tsx:34`: cambiar de herramienta desmonta el job (A3-R2 reproducido). `src/hooks/useGuide.ts`, `useExport.ts:26,55,63` (parsean todo como JSON).
+- `src/components/StyleGallery.tsx:113-118`: el botón anuncia la frase de muestra, el nombre queda fuera (A3-R5).
+- `src/remotion/TextComposition.tsx`, `src/utils/duration.ts:getCompositionDuration`, `src/remotion/defaults.ts:createTextLayer`, `src/presets/{combos,styles,builtins}.ts`, `src/utils/storage.ts:isTypography,isLayerAnimation`, `src/typography/fontRegistry.ts` (sin imports CSS), `src/fonts.ts:39,152-153,217,262-263` (Anton 400, Instrument Serif 400 itálica, JetBrains Mono 400, Archivo 400/700 confirmados).
+- `src/hooks/useProject.ts:116,297,324`: `recordHistory`, `setLayers`, `applyTemplateToAll` (base de plantillas y handoff); autosave en `localStorage['gb-motion:project']` (`src/utils/project.ts:21`).
+- `src/utils/subtitles.ts:43 exportSubtitles` y `useProject.downloadCaptions`: SRT/VTT ya existen (sólo en «Subtítulos»).
+- `INICIAR_GB_MOTION.cmd:26,30,41`: lanza Vite dev en 4173 y abre `/`.
+- Remotion alfa: VP9 `codec:'vp9'`, `pixelFormat:'yuva420p'`, `imageFormat:'png'` https://www.remotion.dev/docs/transparent-videos · Licencia (≤3 personas gratis; Player no cuenta como render) https://www.remotion.dev/docs/license/faq
+- `docs/decisions/0001–0006`, `docs/lessons-learned.md`: sin paquetes nuevos (0003), wordTiming (0004), commits por fase (0005), hooks/CSS/lazy (0006); verificar video por CDP, overlays fuera del Player.
 
 ### Constraints
-- Keep React 19 + TypeScript + Vite 8 + Remotion 4.0.518. Do not migrate the stack, add no UI framework (Tailwind, shadcn) and no state library.
-- **Zero new npm packages.** Use Node 24 built-ins (`fetch`, `FormData`, `Blob`, `child_process`, `AbortSignal.timeout`), the bundled ffmpeg/ffprobe, and `OffthreadVideo`/`useRemotionEnvironment` from `remotion`. **Never run `pnpm install/add`.** The lockfile does not contain the hand-unpacked packages (for example `@fontsource/big-shoulders-display`), so pnpm would prune them.
-- The environment has no git. Phase 0 makes a full backup before any edit.
-- All UI text is in Spanish (rioplatense "vos", as today). Times are shown in seconds, never in frames.
-- API keys are read only server-side, through `loadEnv(mode, cwd, '')` in `vite.config.ts`. Variable names are not prefixed with `VITE_`. A key never appears in a response, a log, an error message or `dist/`.
-- Render lessons from `textPaint.ts` (do not regress):
-  - The outer stroke uses `text-shadow`, never chained `drop-shadow`.
-  - Stroke ring steps scale with the stroke width.
-  - Paint goes on the span that holds the text. **Any element that gets its own `transform`/`filter` must carry `paintCss` itself.**
-  - Use `visibility`, not `opacity`, to hide words.
-  - A preset imposes its own `mode`.
-  - The guide blob URL is revoked only on unmount, through a ref.
-- Verify render changes with a real export plus ffprobe or frame extraction, not with in-browser timing.
-- Keep the build green and all validators passing after **every** phase.
+- React 19 + TS + Vite 8 + Remotion 4.0.518. **Cero dependencias nuevas**, sin `pnpm install`, sin tocar lockfile (0003). Sin router, sin ProductShell, sin GSAP/Lenis/Lottie.
+- **Ownership exclusivo, sin archivos compartidos.** Claude: `index.html`, `editor/index.html`, `404.html`, `src/landing/**`, `src/App.tsx`, `src/components/**`, `src/styles/**`, `src/presets/templates.ts`, `src/utils/handoff.ts`, `public/landing/**`, `INICIAR_GB_MOTION.cmd`. Codex: `server/**`, `src/hooks/**`, `src/utils/mediaClient.ts`, `src/engine/captionReview.ts`, `src/engine/wordHighlight.ts` (sólo si D3 se confirma, con aviso), `scripts/validate-*`, `package.json` (sólo scripts), `README.md`, `vite.config.ts` (toda la corrida). Un cambio fuera de lo propio se pide por mensaje.
+- **Contratos congelados primero**: Codex publica un commit de contratos/tipos (paso F1-C1) antes de que Claude toque `App.tsx`; Claude anuncia el commit con los HTML/entrypoints antes de que Codex aplique la config MPA. Tests de rutas/runtime/navegador sólo sobre la rama integrada.
+- Puertos: Claude 4174 (dev) / 4184 (runtime); Codex 4175 / 4185; 4173 reservado al launcher de Alejo. Avisar antes de renders, commits, pushes. Nada de merge a `main` sin acuerdo.
+- Runtime sólo loopback `127.0.0.1`; no exponer el servidor actual. Docker, sesiones, cola multiusuario, TTL, orígenes públicos = F4 futura (sin ACs ahora).
+- Visual «Sala de edición»: Anton (titulares, mayúsculas) + Instrument Serif itálica (palabra emocional) + Archivo 400/700 (texto) + JetBrains Mono 400 (timecodes/etiquetas). Tokens: `--negro:#0E0E0C`, `--hueso:#F2EFE6`, `--lima:#D6FF4B`, `--resaltado:#FFE94A`, `--rec:#FF3B2F` (sólo puntos REC). `#00FF00` sólo en el bloque de pantalla verde. Prohibido en la landing: Inter, violetas, `backdrop-filter`/glassmorphism, degradados de fondo. Lima y amarillo como texto sólo sobre negro.
+- Animación: CSS, scroll-driven (`animation-timeline` dentro de `@supports`, fallback IntersectionObserver) y WAAPI. Sólo `transform`/`opacity`/`clip-path`; el texto LCP visible desde el primer paint. `prefers-reduced-motion: reduce` = todo estático; botón visible «Pausar animaciones» (WCAG 2.2.2).
+- Copy: español rioplatense («vos»). Prohibido: «ningún competidor», «nadie», «único», «más viral», «frena el scroll», «10x», «ilimitado», «100% offline», «todo lo que se mueve salió de GB Motion», cifras/testimonios/logos inventados. El titular valora la legibilidad, no dice que los subtítulos «no se leen». «Gratis y sin marca de agua» (decisión reportada por Alejo) se dice sólo sobre la versión local, sin prometer transcripción gratis. Sin analytics, formularios, cuentas ni media personal de Alejo en el hero sin autorización.
+- La demo de la landing nunca lee ni escribe `localStorage`/IndexedDB del editor y nunca llama a `/api/*`.
+- No regresar lecciones de render (`textPaint`, blob, overlays fuera del Player) ni AC1–42 históricos; verificación de video por CDP en Chrome headless.
 
 ### Files to touch
-- `backups/before-redesign-20261003/` (create): copy of `src/`, `scripts/`, `docs/`, `vite.config.ts`, `package.json`, `tsconfig*.json`, `index.html`, `README.md`, `INICIAR_GB_MOTION.cmd`.
-- `server/http.ts` (create): `readBody`, `json`, `isAllowedOrigin`, `parseRange`.
-- `server/ffmpeg.ts` (create): binary resolution, `probe`, `extractAudio`.
-- `server/media.ts` (create): upload, serving with Range, HEAD.
-- `server/render.ts` (create): the render jobs moved out of the config, plus burn-in, format validation, and one job at a time.
-- `server/transcribe.ts` (create): providers, jobs, result cache, error mapping.
-- `server/plugin.ts` (create): the Vite plugin that wires every route.
-- `vite.config.ts` (modify): slimmed down. Uses `loadEnv`, `server.watch.ignored`, and the new plugin.
-- `tsconfig.node.json` (modify): include `server/**/*.ts` and `src/captions/**/*.ts`.
-- `src/captions/{types,group,toLayers,providers}.ts` (create): pure caption logic, shared by the server and the tests.
-- `src/engine/wordHighlight.ts` (create): per-word highlight CSS for every mode.
-- `src/types/motion.ts`, `src/utils/editor.ts`, `src/utils/project.ts`, `src/engine/layerAnimation.ts`, `src/engine/textLayout.ts` (modify): the fixes and the new fields.
-- `src/remotion/TextComposition.tsx`, `src/remotion/Root.tsx` (modify): highlight modes, `OffthreadVideo` at render time, video length in the duration.
-- `src/utils/mediaClient.ts` (create): upload through XHR with progress, polling of transcription jobs.
-- `src/components/AutoCaptionsPanel.tsx` (create). `GuidePanel.tsx`, `OutputPanel.tsx`, `WordTimingPanel.tsx`, `CanvasOverlay.tsx`, `src/App.tsx` (modify).
-- Run 2: `src/hooks/{useProject,useGuide,useExport,useTranscription}.ts`, `src/components/{SubtitlesPanel,EmptyState,SafeZoneOverlay}.tsx` (create). `TimelineDock.tsx`, `App.tsx` (modify). `src/styles/*.css` (create), with `src/styles.css` reduced to `@import` lines.
-- `scripts/validate-captions.mjs`, `scripts/validate-server.mjs`, `scripts/fixtures/{elevenlabs-es,groq-es}.json` (create). `package.json` (modify: test scripts only).
-- `.env.example` (create). `.gitignore` (modify: `.env`, `.env*.local`, `media/`, `exports/*.mov`). `README.md` (modify).
+Claude:
+- `index.html` (modify, Claude): pasa a ser la landing: HTML semántico completo de §Landing, metadata SEO/OG, `<script type="module" src="/src/landing/main.ts">`, sin `#root`.
+- `editor/index.html` (create, Claude): copia del `index.html` actual con `<title>GB Motion · Editor</title>`, `#root` y `<script type="module" src="/src/main.tsx">` (entrada existente sin cambios).
+- `404.html` (create, Claude): página 404 con estilo de la landing, enlaces a `/` y `/editor/`; script `/src/landing/notFound.ts`.
+- `src/landing/main.ts` (create, Claude): TS plano: playhead/nav, reveals, contador, pausa global, reduced-motion, montaje diferido del hero.
+- `src/landing/notFound.ts` (create, Claude): importa sólo fuentes y CSS de la landing.
+- `src/landing/fonts.ts` (create, Claude): sólo `@fontsource/anton/latin-400.css`, `archivo/latin-400.css`, `archivo/latin-700.css`, `instrument-serif/latin-400-italic.css`, `jetbrains-mono/latin-400.css`.
+- `src/landing/landing.css` (create, Claude): tokens y layout de la landing; nada global compartido con el editor.
+- `src/landing/hero/mountHero.ts` (create, Claude): `import()` diferido de la isla al estar visible + idle.
+- `src/landing/hero/HeroDemo.tsx` (create, Claude): isla React con `@remotion/player` + `TextComposition`, input ≤80, chips de plantillas, fondo, «Abrir en el editor».
+- `src/landing/hero/demoFonts.ts` (create, Claude): CSS `@fontsource` exacto de las familias de las plantillas del hero (se carga con la isla).
+- `public/landing/estilos/*.jpg` (create, Claude, opcional): stills de renders reales de GB Motion (turno de render coordinado).
+- `src/App.tsx` (modify, Claude): invoca `useTranscription` (con `sessionKey`) y `useServerCapabilities`; tarea STT/cancelar en el header; gating por capacidades; `CaptionReviewPanel`; lectura única del handoff; plantillas; enlace de estilo; link a `/`.
+- `src/components/AutoCaptionsPanel.tsx` (modify, Claude): presentacional `({ model }: { model: TranscriptionModel })`.
+- `src/components/GuidePanel.tsx`, `src/components/OutputPanel.tsx` (modify, Claude): estados por capacidad con motivo visible; Exportar suma SRT/VTT; botón WebM sólo si AC27 PASS.
+- `src/components/StyleGallery.tsx` (modify, Claude): nombre accesible = nombre del estilo (A3-R5).
+- `src/components/CaptionReviewPanel.tsx` (create, Claude): lista de avisos, salto a frase, sin editar.
+- `src/components/HandoffDialog.tsx` (create, Claude): vista previa + Aplicar/Cancelar.
+- `src/components/TemplatePicker.tsx` (create, Claude): «Plantillas» en Estilo.
+- `src/components/ServerStatus.tsx` (create, Claude): indicador listo/mock/sin servidor + reintentar.
+- `src/presets/templates.ts` (create, Claude): 8 plantillas con nombre y funciones puras de aplicación.
+- `src/utils/handoff.ts` (create, Claude): encode/decode/validación del fragmento.
+- `src/styles/panels.css` (modify, Claude): estilos de los componentes nuevos del editor.
+- `INICIAR_GB_MOTION.cmd` (modify, Claude): sondea y abre `http://127.0.0.1:4173/editor/`.
+
+Codex:
+- `server/app.ts` (create, Codex): `createGbMotionHandler`, dispatch actual + `/api/health`.
+- `server/config.ts` (create, Codex): `loadGbServerConfig`.
+- `server/runtime.ts` (create, Codex): entrypoint Node de producción local; sirve `dist` MPA.
+- `server/plugin.ts` (modify, Codex): adaptador Vite sobre el handler; conserva invalidación del bundle.
+- `server/http.ts` (modify, Codex): 413 JSON sin cortar socket (D2).
+- `server/render.ts` (modify, Codex): publicación atómica, cancelación coherente, poda, `alpha-webm` sólo si AC27 PASS.
+- `server/renderInput.ts` (create, Codex): `validateRenderInput`.
+- `server/jobs.ts` (create, Codex): `pruneFinishedJobs` puro (D6).
+- `src/hooks/useServerCapabilities.ts` (create, Codex); `src/hooks/useGuide.ts`, `useTranscription.ts`, `useExport.ts` (modify, Codex): R2, R3, R5 cliente.
+- `src/utils/mediaClient.ts` (modify, Codex): `signal` en upload/STT, respuestas no-JSON.
+- `src/engine/captionReview.ts` (create, Codex): `reviewCaptions` puro.
+- `src/engine/wordHighlight.ts` (modify, Codex, condicional): sólo si D3 se reproduce (AC33).
+- `vite.config.ts` (modify, Codex): `appType:'mpa'` + input landing/editor/404, preserva lo actual.
+- `package.json` (modify, Codex): `start` y `test:*` nuevos; dependencias intactas.
+- `scripts/validate-product.mjs`, `validate-lifecycle.mjs`, `validate-caption-review.mjs`, `validate-handoff.mjs`, `validate-webm-alpha.mjs` (create, Codex); `scripts/validate-server.mjs` (modify, Codex).
+- `README.md` (modify, Codex): modos, `npm start`, rutas, capacidades, primer export lento, límites.
 
 ### Out of scope
-- Local whisper.cpp provider, translation or dubbing, automatic emoji, LLM keyword picking, silence cutting, b-roll, auto-zoom, 4K or 60 fps output, cloud deployment.
-- Replacing the heuristic auto-fit with real font measurement.
-- Moving autosave from localStorage to IndexedDB.
-- Changing any existing preset, style or font.
+- F4 hosteado: Docker, código de acceso/sesiones, aislamiento por sesión (D5), `GB_ALLOWED_ORIGINS` (D4), cola/topes, TTL, pre-bundle (D8), compositor Linux (D9), lockfile (D7), privacidad/términos, deploy público con render/IA.
+- Backlog: keywords automáticas (opt-in), emoji stickers, autozoom, fuentes nuevas (TikTok Sans), perfil de marca, lotes, paquete portátil, reencuadre, barra de progreso, cortar silencios, b-roll, render en navegador, `/plantillas/` y `/ayuda/`, comparativa de competidores, checks de zona segura/solape visual sin datos de layout fiables.
+- Cambiar presets, estilos, fuentes o el motor salvo D3/hueco confirmados. Router, store compartido, analytics, formularios, cuentas.
 
 ### Acceptance criteria
-Run 1 covers AC1–AC31. Run 2 covers AC32–AC42. Steps marked UI use `http://127.0.0.1:4173` with the dev server running. Test media: any Spanish talking clip of 20–60 s (`S.mp4`). Without one, generate `T.mp4` with `ffmpeg -f lavfi -i testsrc2=s=1080x1920:r=30 -f lavfi -i sine=f=440 -t 8 -c:v libx264 -c:a aac T.mp4`.
-- AC1: A full backup exists before the first code edit. Check: `find backups/before-redesign-20261003/src -type f | wc -l` vs `find src -type f | wc -l`, run before Phase 1. Pass: the two counts are equal.
-- AC2: TypeScript compiles. Check: `node node_modules/typescript/bin/tsc -b --pretty false`. Pass: exit 0, no output.
-- AC3: The production build succeeds. Check: `node node_modules/vite/bin/vite.js build`. Pass: exit 0.
-- AC4: The existing validators pass. Check: `node --experimental-strip-types scripts/validate-{font-registry,motion-engine,editor}.mjs`. Pass: prints `FONT_REGISTRY_OK`, `MOTION_ENGINE_OK` and `EDITOR_OK`.
-- AC5: The caption logic is covered by tests. Check: `node --experimental-strip-types scripts/validate-captions.mjs`. Pass: prints `CAPTIONS_OK`. The asserts cover:
-  - grouping by word count, by characters, on silence and on punctuation, and filler removal;
-  - contiguous word frames;
-  - `remapWordTiming` and `splitWordTiming`;
-  - mapping the fixture responses of both providers, including Groq punctuation recovery;
-  - the uppercase layout (AC12) and the exit anchoring (AC13);
-  - the new `wordTiming` modes surviving `parseProjectFile`.
-- AC6: The server helpers are covered by tests. Check: `node --experimental-strip-types scripts/validate-server.mjs`. Pass: prints `SERVER_OK`. The asserts cover:
-  - `readBody` decoding a `ñ` split across 2 chunks;
-  - `parseRange`;
-  - `isAllowedOrigin`;
-  - `isSupportedFormat` rejecting 1920×1920;
-  - the provider error mapping never containing the key string.
-- AC7 (B1): "Combinación completa" saves both look and motion. Check (UI):
-  1. Turn on «Ajustes finos».
-  2. Click Save, choose «Combinación completa», name it "Mi combo".
-  3. Reload the page and open «Estilo → Combinaciones».
-  4. Apply "Mi combo" to another phrase.
-  Pass: "Mi combo" is listed with a delete button, and applying it sets that phrase's typography and in/out effects equal to the saved ones.
-- AC8 (B2): The render endpoint only accepts the offered formats. Check: `curl -s -o /dev/null -w "%{http_code}" -X POST localhost:4173/api/render -H "Content-Type: application/json" -d '{"props":{...demo},"format":{"id":"x","width":1920,"height":1920},"kind":"green"}'`. Pass: `400`. The same request with `{"id":"portrait","width":1080,"height":1920}` returns `202`.
-- AC9 (B3): Large Spanish payloads render intact. Check: smoke render with 150 layers whose text is `¿QUÉ PASÓ? ÑANDÚ ÁÉÍÓÚ` (body larger than 200 KB). Then extract frame 5 with ffmpeg. Pass: the job finishes, and the frame shows the accented text with no `�` replacement characters.
-- AC10 (B4): Editing caption text keeps the word timings of unchanged words. Check (UI):
-  1. Use a phrase with word timings `HOLA A TODOS`.
-  2. Change the text to `HOLA A TODOS USTEDES`.
-  Pass: «Sincronizar palabra por palabra» still lists the original starts for HOLA, A and TODOS, plus an added row for USTEDES.
-- AC11 (B5): Splitting keeps timings on both halves. Check (UI): split a phrase that has word timings at the playhead between word 2 and word 3. Pass: the first half keeps words 1–2 with their original starts. The second half has words 3+ rebased to its own start, with the same absolute times (within ±1 frame).
-- AC12 (B6): Auto-fit accounts for uppercase. Check: covered by AC5. Pass: a lowercase 60-character text yields a smaller `fontSize` with `uppercase: true` than with `uppercase: false`.
-- AC13 (B7): The exit animation is anchored to the end of a manual clip. Check: covered by AC5, using a layer with manual `durationFrames=120`, in=18, out=18. Then in the UI, stretch a clip that has an exit. Pass: `getAnimationPhase(...,110).kind === 'out'` and `(...,60).kind === 'hold'`. In the preview, the exit plays in the last 0.6 s of the clip.
-- AC14 (B8): Deleting a custom motion preset cleans up the layers that use it. Check (UI): save a custom motion preset, apply it as the entry effect, then delete it. Pass: the phrase's «Entrada» shows the default preset, and no layer has `animation.in.preset.id` equal to the deleted id (inspect the downloaded project JSON).
-- AC15 (B15): The local API rejects foreign websites. Check: `curl -s -o /dev/null -w "%{http_code}" -X POST localhost:4173/api/render -H "Origin: https://evil.example" -H "Content-Type: application/json" -d '{}'`. Pass: `403`. The same request with `Origin: http://127.0.0.1:4173` reaches validation and returns `400`.
-- AC16: Only one render runs at a time. Check: start two exports within 1 s, using curl or two tabs. Pass: the second request gets `409` with the message `Ya hay un video en proceso. Esperá a que termine o cancelalo.`
-- AC17: Uploading a video stores it and probes it. Check: `curl -s -X POST localhost:4173/api/media -H "Content-Type: application/octet-stream" -H "X-File-Name: T.mp4" --data-binary @T.mp4`. Pass: `201`, with JSON `{mediaId, durationInFrames, width, height, hasAudio}`. `durationInFrames` equals `round(ffprobe duration × 30)`, and the file exists in the media folder.
-- AC18: Media is served with byte ranges. Check: `curl -s -D - -r 0-99 localhost:4173/media/<mediaId> -o part.bin`. Pass: status `206`, header `Content-Range: bytes 0-99/<size>`, and `part.bin` is 100 bytes.
-- AC19: Error path for an unreadable video. Check: upload a text file named `fake.mp4`. Pass: `422` with `{"error":"No pude leer ese video. Probá con un MP4."}`, and no new file remains in the media folder.
-- AC20: The video re-links after a reload. Check (UI):
-  1. Load `T.mp4` in «Video» and wait for «Video guardado».
-  2. Reload the page.
-  Pass: «Video» shows the file loaded without re-selecting it, and the preview plays its frames.
-- AC21: The burned-in export works and keeps the original audio. Check (UI):
-  1. Load `T.mp4` and add 2 phrases.
-  2. Click «Exportar → Video con tus subtítulos».
-  3. Run `ffprobe -show_streams` on the output.
-  4. Extract a frame while a phrase is visible.
-  Pass:
-  - the output is `gb-motion-burn-<ts>.mp4`, 1080×1920, h264, with an audio stream;
-  - its duration is within ±0.1 s of max(video, captions);
-  - the frame shows video pixels (not uniform) with the caption on top.
-- AC22: The green export is unchanged with a video loaded. Check: same project as AC21, «Video con fondo verde», then ffprobe and a frame extraction. Pass:
-  - no audio stream;
-  - duration equals the captions length;
-  - corner pixel (5,5) has R≤8, G≥247, B≤8.
-- AC23: Error path for burn-in with no uploaded video. Check: POST `/api/render` with `kind:"burn"` and no `media`. Pass: `400` with `Subí un video en «Video» para exportarlo con subtítulos.` The UI button is disabled and shows the same hint.
-- AC24: Transparency (beta) still exports. Check (UI, «Ajustes finos» on): «Transparencia (beta)», then ffprobe. Pass: codec `prores`, and the pixel format contains `yuva`.
-- AC25: API keys never leak. Check:
-  1. Create `.env.local` with `ELEVENLABS_API_KEY=test-key-123`.
-  2. Run `vite build`, then `grep -r "test-key-123\|ELEVENLABS_API_KEY\|GROQ_API_KEY" dist/`.
-  3. Call `curl localhost:4173/api/transcribe/providers`.
-  Pass: grep finds 0 matches, and the JSON only contains `{providers:[{id,label,configured}]}`.
-- AC26: Error path for a missing key. Check: start dev with no keys and no mock, then `POST /api/transcribe {"mediaId":...}`. Pass: `412` with `{code:"missing_key"}`. The UI shows `Falta la clave de la IA. Agregá ELEVENLABS_API_KEY o GROQ_API_KEY en .env.local y reiniciá GB Motion.`
-- AC27: Error path for a rejected key or a provider failure. Check: set `ELEVENLABS_API_KEY=invalid`, then run «Generar subtítulos». Pass: the job ends `error` with `La clave de ElevenLabs no es válida.` The project layers are unchanged, and the server log contains no key text.
-- AC28: The full flow works with the mock provider, without paying. Check:
-  1. Start with `GB_TRANSCRIBE_MOCK=1` and load `T.mp4`.
-  2. Run «Generar subtítulos» with 3 palabras and «Reemplazar».
-  Pass:
-  - captions are created from `scripts/fixtures/elevenlabs-es.json`;
-  - each caption has ≤3 words and wordTiming word count = word count;
-  - one Ctrl+Z restores the previous layers;
-  - running again on the same video takes the cached result, with no provider call (logged as `cache`).
-- AC29: Real transcription quality. Check: with a real key and `S.mp4`, run «Generar subtítulos». Pass:
-  - accents and ¿¡ are preserved;
-  - the first caption starts within 0.3 s of the first spoken word (listen while scrubbing);
-  - the highlighted word follows the speech within ±0.2 s.
-  If no key is available the result is BLOCKED and is not counted as a pass.
-- AC30: The new highlight modes render correctly. Check: phrase `UNO DOS TRES` with even timing over 90 frames and a gradient style. Export green and extract frames 20 and 50 for each mode. Pass:
-  - `reveal`: frame 20 shows only UNO;
-  - `karaoke`: at frame 50, UNO and DOS are in the highlight color;
-  - `scale`: at frame 50, DOS is larger, with the gradient still visible.
-- AC31: Large projects stay usable. Check: «Guion» with 300 lines at 0.5 s each, then autosave, undo, and a green export with all phrases visible (about 150 s). Pass: 300 phrases are accepted (MAX_LAYERS=400), «Guardado» appears, one Ctrl+Z removes all 300, and the export completes. Generating more than the remaining capacity is refused with `Son demasiados subtítulos (N). Subí «palabras por subtítulo» o acortá el video.`
-- AC32 (Run 2): The left rail shows the new workflow. Check: open the app. Pass: the rail shows exactly `Video · Subtítulos · Texto · Estilo · Efectos · Exportar`, in this order.
-- AC33 (Run 2): Every existing feature survives the redesign. Check: walk the inventory F1–F42 using its "where" column. Pass: every row is reachable and behaves as before. Record any failure.
-- AC34 (Run 2): The bundle is split. Check: `vite build`. Pass: the output contains no `Some chunks are larger than` warning.
-- AC35 (Run 2): No horizontal page scroll. Check: viewports 1366×768 and 390×844, then `document.documentElement.scrollWidth <= clientWidth`. Pass: true for both.
-- AC36 (Run 2): Transcript editing in «Subtítulos». Check:
-  1. Edit row 3's text.
-  2. Find and replace «pa» with «para».
-  3. Click a row's time.
-  Pass: the preview updates and the timings are preserved (AC10 rule). All matches across rows are replaced as one undo step. The playhead seeks to that row's start.
-- AC37 (Run 2): The compact timeline lane. Check: open a project with more than 12 captions. Pass: the timeline shows a single «Subtítulos» lane by default, with a toggle back to «Pistas». Dragging and resizing a clip in the lane changes `startFrame`/`durationFrames`, and locked clips do not move.
-- AC38 (Run 2): The safe-zone guides are preview-only. Check: «Zona segura: TikTok», then a green export frame. Pass: the overlay is visible in the editor and absent from the exported frame.
-- AC39 (Run 2): Space toggles playback. Check: press Space with focus outside text inputs, then inside the textarea. Pass: playback toggles in the first case. In the second, a space character is typed and playback does not change.
-- AC40 (Run 2): The empty state guides a new project. Check: «Empezar de nuevo». Pass: the stage shows «Subí tu video» with the 3 steps, and «Escribir a mano» dismisses it.
-- AC41 (Run 2): Applying a template to all captions. Check: «Estilo → Aplicar plantilla a todos». Pass:
-  - every unlocked phrase gets the active phrase's typography, in/out/loop, and highlight mode and color;
-  - text, times, word starts, position and fontSize are unchanged;
-  - one Ctrl+Z reverts it.
-- AC42: The README documents the new setup. Check: read `README.md`. Pass: it covers creating `.env.local` with each key, the media folder location, «Generar subtítulos», both export kinds, and the restart-after-editing-env note, all in Spanish.
+Convenciones: `<PD>` = puerto dev del dueño del check (4174/4175), `<PR>` = runtime (4184/4185). «CDP» = Chrome headless por DevTools Protocol. «Build» = `node node_modules/typescript/bin/tsc -b --pretty false` + `node node_modules/vite/bin/vite.js build`. «Runtime» = Build y luego `$env:GB_PORT=<PR>; node --experimental-strip-types server/runtime.ts`. Dueño entre corchetes. AC1–17 son los de Codex (IDs fijos) adaptados a MPA.
+- AC1 [Ambos]: Rutas MPA. Check: en Runtime GET `/`, `/editor`, `/editor/`, `/no-existe`; en CDP abrir `/editor/`, editar, refresh, Atrás/Adelante entre `/` y `/editor/`; en dev `<PD>` abrir `/` y `/editor/`. Pass: `/`→200 landing (contiene `<h1`), `/editor`→301 o 308 con `Location: /editor/`, `/editor/`→200 con `#root`, `/no-existe`→404 HTML de `404.html`; URL y vista coinciden tras back/forward; refresh conserva el proyecto (mismo `localStorage['gb-motion:project']`).
+- AC2 [Claude]: Landing completa e identidad. Check: CDP capturas 1440×900 y 390×844 de `/`; consultar los `id` de §Landing; `getComputedStyle` de `h1`, `body` y párrafos. Pass: existen las 12 secciones en el orden de §Landing; `h1` computa `Anton`, `body` `Archivo`, ningún elemento visible computa `Inter`; todo texto de párrafo ≥16px; sin marketing fuera de AC31.
+- AC3 [Claude]: Scroll y teclado. Check: CDP en `/` (360, 390, 768, 1366×768, 1920) y `/editor/` (1366×768, 390×844): `document.documentElement.scrollWidth <= clientWidth`; Tab por CTA, input, chips, pausa, FAQ. Pass: true en todas; la landing scrollea vertical, el editor conserva paneles/timeline; foco visible en todo elemento enfocado; chips operables con flechas (`role=radiogroup`).
+- AC4 [Claude]: Motion detenible. Check: CDP con `prefers-reduced-motion: reduce` cargar `/` y contar `document.getAnimations().filter(a=>a.playState==='running').length`; sin emulación, pulsar «Pausar animaciones» y repetir; scrollear el hero fuera de vista. Pass: 0 en reduce y 0 tras pausar; en reduce el Player no hace autoplay y muestra la frase completa estática; con play deliberado hay botón de pausa; fuera de viewport el Player está pausado.
+- AC5 [Ambos]: La landing no carga editor/Remotion/51 fuentes. Check: Runtime, CDP perfil limpio, log de red al cargar `/` sin interacción; luego enfocar/ver el hero; luego abrir `/editor/`. Pass: carga inicial sin requests a `assets/editor-*`, `assets/remotion-*` ni chunks de `react-dom` (la isla React también es diferida); woff2 iniciales sólo de anton/archivo-latin/instrument-serif/jetbrains-mono; tras activar el hero llega `remotion-*` + fuentes de las plantillas; `/editor/` carga el registro completo.
+- AC6 [Claude]: Demo real sin tocar autosave. Check: en `/editor/` crear proyecto de 3 frases, guardar `localStorage.getItem('gb-motion:project')` como S0; en `/` escribir `¿QUÉ PASÓ? ÑANDÚ EXTRAORDINARIAMENTE`, probar 3 chips, cambiar fondo; volver a `/editor/`. Pass: string idéntico a S0; el input rechaza el carácter 81; el DOM del Player muestra el texto con acentos y cambia `font-family` por chip; 0 requests a `/api/*` desde `/`.
+- AC7 [Ambos]: Capacidades. Check: `GET /api/health` en dev y Runtime; luego servir `dist` con un estático sin API (`vite preview --port <PD>`) y abrir `/editor/`; bloquear `/api/health` por CDP. Pass: JSON exacto `{version:1,mode:'local',transcriptionMode,capabilities:{upload,render,transcribe}}` sin claves/paths; sin runtime (HTML/404/red) el editor muestra «Modo navegador» con motivo, «Generar subtítulos», subir video al servidor y exportar video quedan deshabilitados con motivo visible; preview, JSON y SRT/VTT siguen funcionando; «Reintentar» vuelve a consultar.
+- AC8 [Codex]: Producción local sin Vite. Check: Runtime; GET `/`, `/editor/`, un `assets/*.js` y `*.css`, `/api/health`, `/api/exports`, `/api/desconocida`, `/..%2fpackage.json`, `/assets/..%2f..%2fpackage.json`; `netstat -ano | findstr <PR>`. Pass: HTML/assets 200 con MIME correcto; APIs JSON; `/api/desconocida` 404 JSON; traversal nunca devuelve `package.json` (404/400); escucha sólo en `127.0.0.1`.
+- AC9 [Codex]: El último video elegido es dueño de preview/mediaId. Check: `validate-lifecycle` retrasa metadata A, elige B, resuelve B y luego A; repite remove/reset/relink A→B con respuestas retrasadas. Pass: A no reaparece ni cambia nombre/mediaId; B coherente; URLs blob abandonadas revocadas; sin setState tras unmount.
+- AC10 [Ambos]: STT ownership. Check: `validate-lifecycle` retrasa start, cancela, luego devuelve ID; cambia video/proyecto/sale del editor durante polling; UI (repro A3) Generar → «Texto» → «Video» con mock. Pass: DELETE cuando se conoce el ID; ningún `onApply` de sesión cancelada; cambiar de herramienta conserva job/estado/«Cancelar» (visible en el header) y aplica el resultado sólo a la sesión vigente; dos clics no crean dos jobs.
+- AC11 [Codex]: Export cancelado/desmontado. Check: retrasar start/poll, cancelar o salir del editor; simular 404/HTML/503. Pass: job remoto cancelado cuando se conoce ID; sin auto-download tardío; mensajes en español accionables, nunca `Unexpected token`.
+- AC12 [Codex]: Sólo exports finalizados. Check: fixture final + parcial/activo/cancelado/fallido; validator + cancelar un render corto. Pass: sólo el final aparece en `/api/exports` y `/exports/*`; publicación por rename tras éxito; cancel/error borran el parcial; un job cancelado nunca pasa a done; archivos de 0 bytes nunca se listan.
+- AC13 [Codex]: Render rechaza entradas inválidas antes de reservar. Check: POST con 0 y 401 capas, `layers:[{}]` (A3-R4), tiempos negativos/no finitos, formato incompatible; luego un proyecto válido existente; Origin ajeno. Pass: inválidos 400 sin job creado; el válido 202 y conserva texto/estilo/tiempos; Origin ajeno 403.
+- AC14 [Codex]: `reviewCaptions` detecta velocidad alta, wordTiming fuera del clip y texto visible vacío. Check: `validate-caption-review` a 30 fps: 25 caracteres en 1 s, palabra fuera del clip, capa vacía; repetir con frases válidas y capa oculta. Pass: issues `too_fast`, `timing_outside_clip`, `empty_visible`; nada para capas ocultas; input sin mutar (deep-equal); el umbral es heurística editable.
+- AC15 [Claude]: Revisar una incidencia selecciona frase y tiempo sin editar. Check: panel con varios avisos y una capa bloqueada; clic en cada aviso; luego exportar. Pass: playhead al inicio de la frase y selección visible; `JSON.stringify(layers)` y el estado de historial (undo disponible) no cambian; el export válido sigue habilitado con avisos.
+- AC16 [Ambos]: Pipeline sin deps nuevas. Check: Build; los 5 validadores actuales + `validate-product`, `validate-lifecycle`, `validate-caption-review`, `validate-handoff`; `git diff main -- pnpm-lock.yaml` y la sección `dependencies`/`devDependencies` de `package.json`. Pass: exit 0, imprimen `*_OK`, sin `Some chunks are larger than`; diff de deps/lockfile vacío.
+- AC17 [Ambos]: Regresión y render real. Check: inventario F1–F42 en `/editor/`; proyecto acentuado; render verde y burn con audio en turno coordinado; ffprobe + fotogramas. Pass: formatos/fps/duración esperados, audio sólo en burn, palabra resaltada sigue el timing, safe-zone ausente. STT real y alfa se declaran BLOCKED/pendientes si no se ejecutan; lo histórico no cuenta como PASS.
+- AC18 [Codex]: 413 legible (D2). Check: en dev y Runtime, `curl -s -o r.json -w "%{http_code}" -X POST http://127.0.0.1:<P>/api/render -H "Content-Type: application/json" -H "Origin: http://127.0.0.1:<P>" --data-binary @big.json` (17 MiB); luego `GET /api/health`. Pass: `413`, `r.json` = `{"error":"El pedido es demasiado grande."}`, curl exit 0 (sin reset 52/56); el health siguiente responde 200.
+- AC19 [Codex]: Poda de jobs (D6). Check: `validate-product` llama `pruneFinishedJobs(jobs,{now,maxFinished:20,maxAgeMs:3600000})` con 30 terminados de edades mezcladas + 1 activo. Pass: el activo sigue; quedan ≤20 terminados y ninguno con más de 1 h; un ID podado da 404 JSON en `GET /api/render/:id`.
+- AC20 [Claude]: Galería accesible (A3-R5). Check: CDP `Accessibility.getFullAXTree` en Estilo → Todos. Pass: cada botón de estilo tiene nombre accesible que empieza con el `name` del preset (p. ej. «Anton contorno»), ninguno es sólo la frase de muestra; la muestra visual sigue visible.
+- AC21 [Claude]: Handoff landing→editor sin proyecto. Check: perfil limpio; en `/` escribir `HOLA ÑANDÚ`, elegir «Neón noche», «Abrir en el editor». Pass: URL final `/editor/` con `location.hash===''` y sin `?`; proyecto con 1 frase `HOLA ÑANDÚ` con `typography.fontFamily` y `wordTiming.mode/color` de la plantilla; la frase nunca aparece en un request de red.
+- AC22 [Claude]: Handoff con proyecto existente. Check: proyecto de 3 frases (S0 = string autosave); abrir `/editor/#demo=<válido>`; Cancelar; repetir y Aplicar «a todas»; Ctrl+Z. Pass: diálogo con nombre de plantilla y vista previa antes de cambiar nada; tras Cancelar el string es idéntico a S0; Aplicar cambia las frases desbloqueadas (fontSize/texto/tiempos intactos) en un solo paso; tras Ctrl+Z `JSON.stringify(layers)` igual al previo.
+- AC23 [Ambos]: Handoff inválido. Check: `validate-handoff` (Codex) sobre `decodeHandoff` con: no-base64url, JSON no-objeto, `v:2`, >4096 caracteres, preset desconocido, `fontSize` NaN/fuera de rango, familia inexistente, color no `#RRGGBB`; en UI abrir `/editor/#estilo=<cada uno>`. Pass: cada caso devuelve `{ok:false,reason}` esperado e imprime `HANDOFF_OK`; en UI aviso «Ese enlace de estilo no es válido o es de otra versión.», sin diálogo, autosave idéntico, sin error no capturado en consola.
+- AC24 [Claude]: Plantillas con nombre. Check: Estilo → Plantillas; generar 5 subtítulos con mock, bloquear 1, aplicar «Amarillo impacto» a todas; Ctrl+Z. Pass: se listan exactamente las 8 de §Plantillas (nombres descriptivos, ninguno de persona); en las 4 desbloqueadas fontFamily/animación/`wordTiming.mode,color` = plantilla y texto/inicio/duración/inicios de palabra/fontSize intactos; la bloqueada intacta; un Ctrl+Z revierte; `validate-handoff` verifica que cada plantilla resuelve estilo y presets.
+- AC25 [Claude]: SRT/VTT en Exportar. Check: con 3 frases visibles, «Exportar» → «Subtítulos .srt» y «.vtt»; comparar con los de «Subtítulos»; luego ocultar todas. Pass: archivos byte-idénticos a los de «Subtítulos»; funcionan sin servidor; con 0 frases visibles los botones quedan deshabilitados con motivo.
+- AC26 [Claude]: Compartir estilo. Check: Estilo → «Copiar enlace de estilo» sobre una frase con texto `SECRETO 123`; decodificar; abrir el enlace en perfil limpio. Pass: el portapapeles cumple `^https?://[^/]+/editor/#estilo=[A-Za-z0-9_-]+$`, ≤4096 caracteres; el payload no tiene `phrase` ni contiene `SECRETO`; en perfil limpio la frase inicial toma esa tipografía.
+- AC27 [Codex]: Spike WebM VP9 alfa. Check: `validate-webm-alpha` renderiza 3 s de `UNO DOS` con fondo transparente (`vp9`, `yuva420p`, `png`); `ffprobe` del stream; decodifica un frame con `-c:v libvpx-vp9` a `rawvideo rgba`; compone en Node sobre negro y sobre blanco. Pass: `codec_name=vp9`; el frame tiene píxeles alfa=0 y alfa=255; en zona transparente cada composición = su fondo, en píxeles opacos ambas composiciones coinciden. Si el encoder/decoder no existe o algo falla: resultado **BLOCKED → backlog**, sin `alpha-webm` en UI ni servidor, sin degradar presets ni sumar paquetes. `alpha_mode`/ffprobe solos no cuentan.
+- AC28 [Claude]: Rendimiento medido (no documental). Check: Runtime; CDP perfil limpio, 390×844 DPR 3, red RTT 150 ms/1,6 Mbps bajada/750 kbps subida, CPU ×4; `PerformanceObserver` de `largest-contentful-paint` y `layout-shift` hasta 10 s; script Node que suma gzip -9 de cada `<script type=module>` y `modulepreload` de `dist/index.html`. Pass: LCP ≤2500 ms, CLS ≤0,05, JS inicial ≤61 440 bytes gzip; se reportan los tres números y el modo; cualquier exceso = FAIL.
+- AC29 [Claude]: Accesibilidad de la landing. Check: CDP en `/`. Pass: exactamente un `h1`; toda `img` con `alt`; `lang="es"`; FAQ con `<details>/<summary>`; Player con `aria-label` = frase actual y sin `aria-live`; contraste ≥4,5:1 en cada par texto/fondo de los tokens usados (cálculo WCAG en script).
+- AC30 [Claude]: Visible sin JS. Check: CDP con `Emulation.setScriptExecutionDisabled(true)` en `/`. Pass: `h1`, títulos de las 11 secciones de contenido (todas menos `nav`), respuestas de FAQ y CTA (`href="/editor/"`) visibles; el marco del hero muestra la frase estática de respaldo.
+- AC31 [Claude]: Guardarraíles de copy y look. Check: `rg -i -n "ningún competidor|nadie|único|más viral|frena el scroll|10x|ilimitad|100% offline|todo lo que se mueve|testimonio|<form|gtag|google-analytics|plausible|umami|backdrop-filter|#(7c3aed|8b5cf6|a855f7)|font-family:[^;]*\bInter\b" index.html 404.html src/landing`. Pass: 0 coincidencias.
+- AC32 [Claude]: Launcher. Check: `rg -n "4173/editor/" INICIAR_GB_MOTION.cmd`; ejecutarlo con 4173 libre. Pass: 2 coincidencias (sondeo y apertura); abre el editor con el proyecto autoguardado.
+- AC33 [Codex]: D3 escala 1.15× con repro previo. Check: export verde `UNO DOS TRES` modo `scale` (timing parejo en 90 frames), frame 45 extraído; mismo frame en el Player por CDP con `getBoundingClientRect` de cada palabra. Pass: el borde derecho de UNO ≤ izquierdo de DOS y DOS ≤ TRES (si no se reproduce: `wordHighlight.ts` sin diff; si se reproduce: tras el fix con aviso, se cumple y el AC30 histórico sigue); evidencia `.audit/d3-*.png` en el reporte.
+- AC34 [Codex repro; fix según archivo]: Hueco «TU FRASE». Check: «Empezar de nuevo», frase por defecto `ESCRIBÍ TU FRASE ACÁ` en 1366×768; CDP con Range rects por palabra en el Player. Pass: el hueco entre TU y FRASE ≤1,5× el hueco entre ESCRIBÍ y TU (no reproducido o arreglado: `CanvasOverlay` → Claude, motor → Codex con aviso).
+- AC35 [Codex]: Checks de A1 sólo con datos fiables. Check: `validate-caption-review` con una frase de 0,4 s y dos frases con wordTiming visibles solapadas en tiempo; una frase superpuesta sin wordTiming. Pass: `too_short` y `time_overlap` emitidos; nada para la capa sin wordTiming; el tipo `CaptionIssueCode` no contiene códigos de zona segura ni solape visual.
+- AC36 [Codex]: Primer bundling medido. Check: Runtime recién iniciado; primer export verde de 1 frase desde la UI; un script consulta `/api/health` cada 1 s durante el bundling; log de red del editor. Pass: el reporte trae ms hasta el primer `progress>0` y latencia máxima de health; el editor no consulta `/api/health` mientras hay export activo y su estado sigue «listo»; README avisa que el primer export tarda más.
 
-## Feature inventory (existing → status). "Where" is the location after Run 2.
-| ID | Feature | Where / status |
-|---|---|---|
-| F1–F6 | Autosave and saved state, open/download project .json, «Empezar de nuevo», undo/redo (buttons + Ctrl+Z / Ctrl+Shift+Z), project name | Top bar; open, download and reset grouped in the «Proyecto» menu. Kept. History made scalable. |
-| F7 | Library (IndexedDB): save project or kit, open with recovery copy, apply kit | Top bar. Kept. |
-| F8–F9 | «Ajustes finos» toggle (persisted); save motion/style/combo modal | Top bar. Kept. Combo fixed (B1). |
-| F10 | Play/pause, «Ver entrada», mute, canvas zoom, size label | Stage toolbar. Kept, plus Space. |
-| F11 | Canvas drag, rotate with snap, resize, smart guides, double-click to edit, arrow-key nudge, "aparece en" badge, safe zone | Stage. Kept. Only active and in-window boxes are drawn. |
-| F12–F14 | Multi-select align/distribute/same look; copy settings / paste look / paste motion; «Acomodar paneles» | Panel header. Kept. |
-| F15–F18 | Style gallery (51 styles, categories, search, save, delete own), combos, «Aplicar look a todas», StyleTuner | «Estilo». Kept. |
-| F19–F23 | In/out/loop tracks, search, categories, favorites, hover/focus preview, delete own presets, exit effect chosen as entry, timings, 11 loops, animation mode, keyframes (advanced) | «Efectos». Kept. |
-| F24–F28 | Text 180 characters, multiline; FontBrowser (favorites, recents), weight, size, alignment, uppercase, italic only where the font has it; color (overrides the gradient); keyword chips and colors; position and «Volver al centro» | «Texto». Kept. |
-| F29 | Word-by-word sync (prepare, color/box, color, per-word start, «Marcar aquí», remove) | «Texto». Kept, plus 3 modes and remap (B4). |
-| F30–F31 | Script from the playhead; SRT/VTT import and export | «Subtítulos». Kept. |
-| F32 | Guide video: pick, re-link, volume/mute, remove, change, waveform, timeline stretch | «Video». Upload and persistence added (B10). |
-| F33 | 3 formats, 5 backgrounds, green / MP4 / alpha export, progress, cancel, download again, past videos | «Exportar». Kept, plus burn-in. |
-| F34 | Timeline: ruler, clock, scrubber, playhead, drag/resize, in/out handles, snap, zoom 1–8×, «Dividir aquí», auto duration, add phrase, numeric start/duration, per-row select/hide/lock/duplicate/delete, lock enforcement | Dock. Kept, plus compact lane. |
-| F35–F37 | Shortcuts Ctrl+C/V/D/Delete; toast | Kept. |
-| F38–F41 | `remotion:studio`, `render:demo`, `/api/render*`, `/api/exports`, offline fonts and validators, responsive layout and reduced motion | Kept. |
-| F42 | A new phrase inherits look and motion and starts after the active one | Kept. |
+## Diseño y trade-offs
+- **MPA (B1 #1, #2).** Tres documentos: `/` landing, `/editor/` editor, `404.html`. Aísla el CSS global del editor (`overflow:hidden`, Inter) y las 51 fuentes sin limpiar clases; la landing es HTML real para LCP/SEO. Rechazado: shell SPA con History API (A2, más lifecycle y riesgo de montar el editor detrás) y router (paquete nuevo). Autosave intacto: mismo origen. Config que aplica Codex: `appType:'mpa'` y en el key de input que ya usa el archivo (`rollupOptions`; si Vite 8 avisa deprecación, `rolldownOptions`) `{ landing: resolve(process.cwd(),'index.html'), editor: resolve(process.cwd(),'editor/index.html'), notFound: resolve(process.cwd(),'404.html') }`, conservando plugins, server, target, `chunkSizeWarningLimit` y `manualChunks`. Sin `build.manifest` (AC28 mide desde `dist/index.html`).
+- **Runtime local (B1 #3).** `createGbMotionHandler(options): { handle(req,res): Promise<boolean>; invalidateBundle(): void; close(): Promise<void> }` con `projectRoot, mediaDir, exportsDir, port, stt`. Trata `/api/*`, `/media/*`, `/exports/*`; `false` para el resto. `loadGbServerConfig(projectRoot, mode)` usa el `loadEnv` instalado (env de proceso manda), valida `GB_PORT` 1–65535 (default 4173), host fijo `127.0.0.1`, paths absolutos. `runtime.ts`: `/`→`dist/index.html`; `/editor`→308 `/editor/`; `/editor/`→`dist/editor/index.html`; estáticos con path contenido en `dist` y MIME; resto 404 con `dist/404.html`; API desconocida 404 JSON; cierre ordenado cancela jobs. `package.json:start = node --experimental-strip-types server/runtime.ts`. El launcher sigue con Vite dev (comportamiento conocido); cambiarlo a runtime es pregunta abierta.
+- **Contratos (A2 paso 2, B1 #8), commit F1-C1:** health `{version:1, mode:'local', transcriptionMode:'mock'|'provider'|'unconfigured', capabilities:{upload:true, render:true, transcribe:boolean}}`; `useServerCapabilities(): {status:'checking'|'ready'|'unavailable'; capabilities; transcriptionMode: …|null; retry(): void}` (timeout 3 s, valida schema; HTML = unavailable; no re-consulta durante un export, por A3-R8); `uploadMedia(file, onProgress, signal?: AbortSignal)`; `startTranscription(input, signal?: AbortSignal)`; `useTranscription` Options `+ sessionKey?: string`; `export type TranscriptionModel = ReturnType<typeof useTranscription>`; `useExport` Options `+ enabled?: boolean`; `reviewCaptions(layers: TextLayer[], fps: number, options?: {maxCharsPerSecond?: number; minDurationSec?: number}): CaptionIssue[]` con `CaptionIssue = {layerId, code: 'too_fast'|'timing_outside_clip'|'empty_visible'|'too_short'|'time_overlap', severity:'warning', message, startFrame}` (stub `[]` permitido en C1). App incrementa `sessionKey` en `onProjectReplaced`.
+- **Fiabilidad (A2, casi literal).** R2: generación incrementada al *comienzo* de pick/relink/remove; abortar subida vieja; metadata sólo si el token es vigente; revocar blob abandonado. R3: STT invocado una vez en App; lock sincrónico; token/sessionKey; DELETE si un start tardío devuelve ID tras cancelar; comprobar señal tras cada await; cambiar herramienta no cancela, cambiar video/proyecto/salir sí. R4: escribir `gb-motion-<kind>-<ts>.partial-<uuid>.<ext>`, rename al nombre final sólo tras éxito no cancelado con handles cerrados; listar/servir sólo finales no vacíos; limpiar parciales en `finally`; reserva activa hasta `finally`. R5: `validateRenderInput(body)` (1–400 capas completas, tipos/valores finitos, intervalos ≥0, formato y kind soportados, reutilizando validadores puros) → 400 antes de reservar; `useExport`/`mediaClient` sin `response.json()` ciego (content-type + try). D2: al pasar el límite dejar de acumular, responder 413 JSON con `Connection: close` y destruir recién en `res.on('finish')`; el handler `close` no pisa el 413. D6: `pruneFinishedJobs` al crear jobs; activos nunca se podan.
+- **Hero = producto (A4 #1).** Un solo `<Player>` (`@remotion/player`) con `component={TextComposition}`, `inputProps={{layers:[layer], background, customBackground:'#0E0E0C'}}`, `durationInFrames=getCompositionDuration([layer])`, `compositionWidth 1080 × 1920`, 30 fps, loop, muted. `layer = applyTemplate(createTextLayer(frase,'demo-1'), plantilla)` con wordTiming parejo. Carga: `IntersectionObserver` + `requestIdleCallback` → `import('./HeroDemo')`. Respaldo previo/no-JS/reduced/`saveData`/`hardwareConcurrency<=4`: frase estática HTML en el marco 9:16 (sin autoplay). Fondo: Oscuro / Verde (`green`) / Transparente (`checker`), modos que ya existen.
+- **Plantillas (§Plantillas).** `CaptionTemplate = { id; name; description; styleId; motion: {in: string; out: string|null; holdFrames: number}; highlight: {mode: WordHighlightMode; color: string} }`, resueltas como `combos.ts` (throw si un id no existe). `applyTemplate(layer, t): TextLayer` copia tipografía (conserva `fontSize`), `preset/overrides/animation` y `wordTiming.mode/color` (si la capa tiene wordTiming; si no, crea parejo sólo en la demo). Aplicar a todas = `project.recordHistory()` + `project.setLayers(map)` saltando bloqueadas (mismo patrón que `applyTemplateToAll`, sin tocar el hook).
+- **Handoff y compartir (B1 Codex §MPA).** `src/utils/handoff.ts`: `type StylePayloadV1 = {v:1; name: string /*≤40*/; templateId?: string; typography: TypographySettings; motion: {in: string; out: string|null; holdFrames: number}; highlight: {mode; color}}`; `type HandoffV1 = {style: StylePayloadV1; phrase?: string /*≤80, sólo landing*/}`; `encodeHandoff(v): string` (base64url de JSON UTF-8); `decodeHandoff(hash: string): {ok:true; value: HandoffV1} | {ok:false; reason:'empty'|'too-large'|'bad-encoding'|'bad-json'|'bad-version'|'bad-fields'}`. Validación: ≤4096 caracteres, `isTypography` + rangos de `sanitizeProject`, familia en `fontRegistry`, presets integrados, color `#RRGGBB`, campos extra ignorados. Fragmentos: `#demo=` (landing, con frase) y `#estilo=` (compartir, nunca frase). App lee una vez con guard de ref (StrictMode), luego `history.replaceState` sin hash. Sin proyecto guardado → aplica directo a la frase inicial (+ frase si viene). Con proyecto → `HandoffDialog` (vista previa con `TextComposition` estático, alcance seleccionada/todas, casilla «Agregar mi frase» si hay frase). Rechazado: query string (texto en logs/Referer) y storage (tocaría el autosave).
+- **Revisión de legibilidad.** Pura, heurística, sin bloquear export ni tocar historial; umbrales por defecto 20 caracteres/s (codepoints) y 0,5 s. `time_overlap` sólo entre capas visibles con wordTiming. Zona segura y solape visual quedan fuera hasta tener bounds reales.
+- **Animación sin dependencias.** CSS keyframes (karaoke del titular sobre `::before`, texto visible desde el primer paint), `animation-timeline: scroll()/view()` para playhead/timeline/chroma dentro de `@supports`, WAAPI para pops escalonados (`steps()`), un único `data-paused` en `<html>` que pone `animation-play-state: paused` y pausa el Player. Rechazado: GSAP/Motion/Lenis/Lottie.
 
-## Broken or defective today (static review; Phase 0 adds whatever the baseline run shows)
-- B1: «Combinación completa» saves only the motion preset. `savePreset` handles `style`, and everything else falls through to motion, so `saveCustomComboPresets` is never called and saved combos never appear.
-- B2: `/api/render` accepts 1920×1920 and any mix of 1080/1920 (V2 audit #7, still open at `vite.config.ts:122`).
-- B3: `readJson` decodes each chunk on its own with `String(chunk)`, so a ñ or an accent split across chunks becomes U+FFFD. It also keeps reading after rejecting, and its 1 MB limit is too small for caption projects.
-- B4: Editing a phrase wipes its `wordTiming`. That would destroy AI timings.
-- B5: «Dividir aquí» drops the word timing of both halves.
-- B6: `textLayout` measures lowercase widths while the render is uppercase (the default style is uppercase). The cache key also lacks `uppercase`, so long phrases can overflow or get clipped.
-- B7: With a manual clip length, the exit starts at in+hold. A shortened clip cuts the exit, and a lengthened one goes blank early.
-- B8: `deleteMotionPreset` resets `layer.preset` but leaves `animation.in/out` pointing at the deleted preset.
-- B9: `Root.calculateMetadata` ignores the video length. This is a prerequisite for burn-in.
-- B10: The guide video does not survive a reload.
-- B11: MAX_LAYERS=120 is too low for auto-captions longer than about 2 minutes. `EditorHistory` deep-stringifies and clones the whole project on every change.
-- B12: The probe `<video>` in `pickGuide` is never released.
-- B13: The bundle is about 650 kB, so Vite warns.
-- B14: The open audit item "webpack Unable to snapshot" warning: verify only, and record if it persists.
-- B15: Any website can POST to `127.0.0.1:4173/api/*`: renders today, paid transcriptions once this lands.
-- B16: There is no render concurrency limit.
+## Riesgos y casos borde
+- Primer bundling de Remotion bloquea la API >15 s (A3-R8): health con timeout 3 s marcaría «sin servidor»; por eso no se re-consulta durante exports y AC36 lo mide. Prebundle es F4 si la medición lo justifica.
+- Chunk `remotion` (~302 kB sin comprimir según A3) en la landing: sólo diferido; el marco tiene `aspect-ratio` fijo para no generar CLS al montar.
+- Fuentes de plantillas: si `demoFonts.ts` omite una familia, el Player cae a fallback sin error; AC6 lo detecta por `font-family` + `document.fonts.check`.
+- En dev, `/editor` sin barra puede dar 404 (sólo el runtime redirige): launcher y links usan siempre `/editor/`.
+- Clave del input de Vite 8 (`rollupOptions` vs `rolldownOptions`): Codex verifica que `dist/index.html`, `dist/editor/index.html` y `dist/404.html` existan.
+- StrictMode monta dos veces: handoff con guard de ref; tareas tolerantes a doble cleanup.
+- Fragmento con frase queda en el historial del navegador hasta el `replaceState`; el link compartible nunca lleva frase.
+- Static hosting sin runtime puede devolver `index.html` 200 en `/api/health`: el schema decide, no el status.
+- Firefox sin `animation-timeline`: fallback IO; Safari: verificación pendiente (A3), registrar.
+- Rename en Windows con handles abiertos (R4); ffmpeg reducido de Remotion puede no tener libvpx (AC27 → BLOCKED).
+- Copy «gratis/sin marca de agua» mal contextualizado en un deploy estático donde no se puede exportar: la landing aclara «exportar video requiere la versión local».
+- Editor movido: marcadores de Alejo a `/` caen en la landing (CTA «Abrir el editor» arriba a la derecha).
 
-## Competitor analysis (October 2026)
-| Tool | Price | Strengths | Weaknesses for this user |
+## Pasos ordenados por fase
+Ramas: Claude `claude/landing-pro` (worktree propio), Codex `codex/product-reliability`; integración en `integ/landing-pro` creada por el orquestador. Un commit por paso, hash anunciado (0005).
+
+| Paso | Claude | Codex | Sincronía |
 |---|---|---|---|
-| Submagic | Free (3 videos/month, watermark); $12–19/month (15 videos, 2 min); Pro $23 | 48+ languages, trendy templates, emoji, zooms, b-roll, brand kit | Video and minute quotas; fixed templates |
-| Captions.ai | $9.99 / $24.99 / $69.99 per month | 100+ templates, keyword emphasis, AI Edit (cuts, zooms), dubbing | Subscription; mobile-first; little motion control |
-| CapCut | Auto-captions free only 10 min/month; $10–19.99 per month | Word templates, manual keyword color, the user's editor today | Captions now paywalled; highlight is manual work |
-| VEED | Free 30 min/month with watermark; $12 / $24 | Browser editor, subtitle styling | Quotas, watermark |
-| OpusClip | Free 60 min/month with watermark; $15 / $29 | Viral clip detection, brand templates | Built for repurposing, not for designing captions |
-| Zubtitle | Free; $19 (10 videos), $49 | Simple | Dated; video caps |
-| Hormozi-style generators | Free to cheap | Bold condensed font, word-by-word, yellow keyword, thick outline | Single look |
-| Remotion `@remotion/captions` | MIT | `Caption` type, `createTikTokStyleCaptions`, SRT helpers. Windows whisper.cpp binaries only up to 1.6.0 | A toolkit, not a product |
+| **F0 · Arreglos** | F0-A: `StyleGallery` nombre accesible `${preset.name}` en el botón (`aria-label` o texto visible), muestra intacta (AC20). | F0-B: D2 en `http.ts`; D6 `server/jobs.ts`; R4 y R5 servidor (`renderInput.ts`, `render.ts`); R2 interno de `useGuide`; R5 cliente en `useExport`/`mediaClient` sin cambiar firmas públicas. F0-C: repro D3 y hueco con evidencia (AC33/34); fix sólo si se reproduce, con aviso. | Independientes. Si el hueco cae en `CanvasOverlay`, Codex pasa la evidencia a Claude. |
+| **F1 · Contratos + rutas + runtime** | F1-R: `editor/index.html`, `index.html` esqueleto semántico (secciones y copy borrador, sin islas), `404.html`, `src/landing/{main,notFound,fonts}.ts`, `landing.css` base, launcher → anunciar hash y paths. F1-U (tras C1): App invoca `useTranscription` + `sessionKey`; `AutoCaptionsPanel({model})`; tarea STT y «Cancelar» en el header; `ServerStatus`; gating en Guide/Output/AutoCaptions con motivos; `useExport({enabled})`. | F1-C1: commit de contratos (firmas/tipos de §Diseño, stubs compatibles) → anunciar. F1-C2: integrar F1-R y aplicar config MPA. F1-C3: `server/{app,config,runtime}.ts`, `plugin.ts` adaptador, health, `useServerCapabilities`, R3 completo, `start`, `validate-product`, `validate-lifecycle`. | C1 antes de F1-U. F1-R antes de C2. Tests AC1, AC5, AC7, AC8, AC10, AC32 en `integ`. |
+| **F2 · Landing + revisión** | F2-L: §Landing completa, hero (`mountHero`, `HeroDemo`, `demoFonts`), motion/pausa/reduced, a11y, SEO/OG, 404 con estilo; stills opcionales (pedir turno de render). F2-P: `CaptionReviewPanel` (pestaña en «Subtítulos» + insignia con conteo), salto con `selectLayer` + seek. | F2-R: `captionReview.ts` real + `validate-caption-review`; README de modos/`npm start`. | Panel se construye sobre el stub de C1; integra al llegar F2-R. Tests AC2–AC6, AC14, AC15, AC28–AC31, AC35, AC36. |
+| **F3 · Features acotadas** | F3-T: `templates.ts` + `TemplatePicker` + chips del hero. F3-H: `handoff.ts` (publicar firmas) + `HandoffDialog` + «Abrir en el editor» + «Copiar enlace de estilo». F3-S: SRT/VTT en `OutputPanel` (reusa `downloadCaptions`). F3-W: botón «Transparencia WebM» sólo si AC27 PASS. | F3-V: `validate-handoff` (decode + plantillas) tras las firmas de F3-H. F3-A: spike WebM (`validate-webm-alpha`); si PASS, kind `alpha-webm` (`.webm`, `video/webm`) en `render.ts` y aviso. | F3-H publica firmas antes de F3-V. F3-W espera el resultado de AC27. Tests AC21–AC27. Cierre: AC16, AC17. |
+| **F4 · Hosteado (futura, sin ACs)** | Smoke de landing en dominio; páginas privacidad/términos. | Docker Debian + Chrome Headless Shell, lockfile D7 (nueva decisión que reemplace 0003 sólo dentro del contenedor), sesiones/código de acceso, aislamiento media/exports (D5), `GB_ALLOWED_ORIGINS` (D4), cola + topes, TTL, prebundle (D8), compositor Linux (D9). | Depende de Alejo: modelo, hosting, presupuesto, dominio, quién paga la IA. Plan propio. |
 
-**The gap GB Motion fills:**
-- No watermark, quota or subscription. Transcription costs cents: Scribe v2 at $0.22/h is about $0.004 per 1-minute reel.
-- The deepest motion engine of the field (47 presets × 3 tracks plus keyframes, 51 offline fonts) applied to the user's **own saved styles**.
-- A Spanish-first UI and grouping, with ¿¡ and Spanish fillers handled.
-- Both a green MP4 (the current CapCut habit) and a burned-in final video.
-- The video stays local; only the audio goes to the STT provider.
+## Landing sección por sección
+Alternancia negro/hueso; cada sección abre con timecode y pista en JetBrains Mono (`00:00:03:12 · T2`). Copy = **BORRADOR** (lo cierra Alejo/content-team). `id` en paréntesis (AC2).
+0. **Barra** (`nav`): wordmark «GB MOTION» con punto REC coral; enlaces Estilos · Cómo funciona · Exportar · Preguntas; CTA «Abrir el editor» → `/editor/`; botón «Pausar animaciones». Debajo, playhead fino que avanza con el scroll (scroll-driven; reduced: estático con sección activa marcada); clic en un tramo salta a la sección.
+1. **Hero** (`hero`, negro): H1 BORRADOR «SUBTÍTULOS QUE SE LEEN *y se mueven.*» (Anton + Instrument Serif itálica); bajada BORRADOR «Escribí una frase, elegí un estilo y mirala animarse con el mismo motor que exporta tu video.»; CTA «Probá tu frase» (ancla al input) y «Abrir el editor». Derecha: marco 9:16 con la isla; debajo input «Tu frase» (maxlength 80), chips de 6 plantillas (`radiogroup`), fondo Oscuro/Verde/Transparente, «Abrir en el editor →». Anima: barrido karaoke del H1 una vez; Player en loop (sólo sin reduced).
+2. **Datos reales** (`datos`, hueso): «51 tipografías · 47 efectos de movimiento · 5 modos de resaltado · 0 marcas de agua en la versión local» (cifras de validadores). Anima: contador una vez al entrar.
+3. **Estilos** (`estilos`, negro): BORRADOR «Una frase. Ocho estilos. Probá el tuyo.» Tarjetas de distinto tamaño (hoja de contactos) con nombre + still real si existe; clic selecciona esa plantilla en el hero y vuelve a él. Anima: pop escalonado al entrar.
+4. **Cómo funciona** (`como-funciona`, hueso): línea de tiempo de 3 clips: «Subí tu video» → «Generá subtítulos palabra por palabra» → «Ajustá y exportá»; nota honesta: la IA requiere un proveedor configurado en la versión local. Anima: playhead recorre los clips con el scroll.
+5. **El motor** (`motor`, negro): pistas Entrada · Pausa · Salida + bucles; BORRADOR «Controlás cómo entra, cómo se queda y cómo sale cada frase.» Anima: bloques de pista que se desplazan (CSS), sin segundo Player.
+6. **Español primero** (`espanol`, hueso): `¿¡ÑÁÉÍÓÚ!?` en Anton con resaltado por palabra; agrupado pensado para español, muletillas filtradas (eh, em, mm), interfaz en español.
+7. **Revisión de legibilidad** (`revision`, negro): mock HTML del panel con avisos «Muy rápida», «Palabra fuera del clip», «Frase vacía»; BORRADOR «Antes de exportar, GB Motion te avisa qué frase cuesta leer. Vos decidís.»
+8. **Exportá** (`exportar`, hueso, 4 bloques distintos): MP4 con tus subtítulos; pantalla verde `#00FF00` a sangre con máscara que «hace el chroma» al scrollear; transparencia ProRes 4444 sobre damero (+ WebM sólo si AC27 PASS); SRT/VTT como archivo de texto con timecodes.
+9. **Local y privado** (`local`, negro): BORRADOR «En la versión local tu video no sale de tu compu; para generar subtítulos, sólo el audio va al proveedor que configures.» + «Exportar video requiere la versión local».
+10. **Preguntas** (`preguntas`, hueso): `<details>`: ¿Es gratis? ¿Tiene marca de agua? ¿Mi video se sube? ¿Qué necesito para la IA? ¿Se puede usar en el celu? ¿Qué es la versión local?
+11. **Cierre** (`cierre`, negro): «EMPEZÁ A SUBTITULAR» a todo el ancho con resaltado palabra por palabra + CTA «Abrir el editor». Footer mínimo: © GB Motion (redes cuando Alejo pase los usuarios).
 
-**Missing versus the field, deferred:** b-roll, auto-zoom, silence removal, translation, auto-emoji, 4K/60 fps.
+## Plantillas (F3)
+`amarillo-impacto` «Amarillo impacto» (`imp-anton`, color `#FFE94A`) · `blanco-clasico` «Blanco clásico» (`sub-blanco`, color) · `pildora-lima` «Píldora lima» (`sub-caja-lima`, box) · `minimal-suave` «Minimal suave» (`sub-blanco-fino`, karaoke) · `revelado` «Revelado palabra a palabra» (`sub-condensado`, reveal) · `neon-noche` «Neón noche» (`neon-cian`, color) · `editorial-serif` «Editorial serif» (`edi-serif`, karaoke) · `terminal` «Terminal» (`tech-terminal`, reveal). Movimiento: ids existentes de `builtins.ts`/`extraMotion.ts` elegidos por Claude y documentados en el archivo. Chips del hero: las 8 menos `revelado` y `terminal` (6).
 
-Sources:
-- https://cutsnap.ai/blog/submagic-pricing-2026
-- https://www.itechguides.com/best/ai-video-caption-generators/submagic/
-- https://prizmad.com/review/captions-ai
-- https://www.descript.com/blog/article/capcut-captions-arent-free-anymore-heres-a-better-option
-- https://rendercut.io/capcut-pro-vs-free
-- https://findstack.com/products/veed/pricing
-- https://www.castmagic.io/blog/opus-clip-pricing
-- https://zubtitle.com/pricing
-- https://www.choppity.com/tools/hormozi-caption-style-generator/
-- https://www.remotion.dev/docs/install-whisper-cpp/install-whisper-cpp
-
-## AI subtitles: recommendation
-| Option | Spanish quality | Word timestamps | Cost | Setup on this machine | Privacy |
-|---|---|---|---|---|---|
-| **ElevenLabs Scribe v2** (recommended) | Best hosted: 2.2% AA-WER overall, about 3.1% on FLEURS Spanish | Native, with punctuation and logprob | $0.22/h; Starter $6/month includes 4.5 h | One HTTPS call; accepts files up to 5 GB | Audio goes to the cloud |
-| **Groq Whisper large-v3** (alternative) | About 2.8% on FLEURS Spanish; Whisper word times drift more | `verbose_json` + `timestamp_granularities[]=word` (no punctuation in `words`) | $0.111/h; free tier with a 25 MB cap | One HTTPS call | Cloud |
-| OpenAI gpt-4o-transcribe / gpt-transcribe | Good | **No** word timestamps (only `whisper-1` has them) | $0.0045–0.006/min | Simple | Cloud |
-| Deepgram Nova-3 | 8.9% on FLEURS Spanish | Yes | $0.0043/min, $200 credit | Simple | Cloud |
-| AssemblyAI Universal | Good | Yes | $0.15/h, $50 credit | Upload, then poll | Cloud |
-| whisper.cpp through `@remotion/install-whisper-cpp` | Model-dependent; CPU-slow for large models | Token-level | Free | Windows binaries only up to 1.6.0; needs a new package | Fully local |
-| transformers.js in the browser | Small models only | Weak | Free | Heavy WASM download; slow | Local |
-
-**Decision:**
-- Use ElevenLabs Scribe v2 as the primary provider and Groq `whisper-large-v3` as the alternative.
-- Both are plain `fetch` calls, so no dependencies.
-- The provider is chosen by `GB_TRANSCRIBE_PROVIDER`, or by whichever key exists (ElevenLabs first).
-- A local whisper.cpp provider (`WHISPER_CPP_BIN` + `WHISPER_MODEL` using the official Windows release zip) is the planned next increment for full privacy.
-- Sources:
-  - https://elevenlabs.io/pricing/api
-  - https://speechtotext.dev/model/elevenlabs-scribe-v2/
-  - https://console.groq.com/docs/speech-to-text
-  - https://costgoat.com/pricing/openai-transcription
-  - https://www.assemblyai.com/benchmarks
-  - https://www.cekura.ai/blogs/deepgram-pricing
-  - https://apicostcalc.com/assemblyai.html
-
-## Design decisions and trade-offs
-- **Server-side media.** Upload the picked file once to `POST /api/media` and store it in `GB_MEDIA_DIR`. The default is `%LOCALAPPDATA%\gb-motion\media`, because the project lives in **OneDrive** and multi-GB copies would sync.
-  - The render resolves `mediaId` to `http://127.0.0.1:<port>/media/<id>` **server-side**; a client-sent `src` is always stripped. This keeps the blob lesson: blobs still never reach the render.
-  - Rejected: copying into `public/` (watched, bundled) and `file://` URLs (not supported by OffthreadVideo).
-- **Preview vs. render video.** The preview keeps today's `<Video>` with the blob, or `/media/<id>` after a reload. The render uses `<OffthreadVideo>` when `useRemotionEnvironment().isRendering`, which gives frame-exact extraction with audio.
-  - Rejected: `@remotion/media` `<Video>`. It is not hoisted, would need a manual link, and falls back to OffthreadVideo anyway.
-- **No `@remotion/captions`.** Keep its `Caption`-compatible shape (`text,startMs,endMs,confidence`) in `src/captions/types.ts` and write Spanish-aware grouping ourselves. It is also testable without linking a non-hoisted package.
-- **Captions map onto the existing model.** One AI page becomes one `TextLayer` with manual `durationFrames` and real `wordTiming`. There is no new render path, so all styles and effects apply unchanged.
-- **Word highlight modes extend `WordTiming.mode`:**
-  - `'color'|'box'` (today);
-  - `'karaoke'` (spoken words keep the color);
-  - `'reveal'` (unspoken words get `visibility:hidden`, so layout and gradient clip stay intact);
-  - `'scale'` (the active word gets `scale(1.15)` on an inline-block that **carries its own paintCss**).
-- **Persistence.** History stores immutable references and does shallow field compares instead of JSON plus `structuredClone`, so 400 layers stay cheap. MAX_LAYERS goes up to 400 (about 8 minutes of speech at 3 words per caption).
-- **Security.** `/api/*` POST and DELETE require `Origin` to be absent or `http://127.0.0.1:<port>` / `http://localhost:<port>`. GET `/media` stays open because the render fetches it.
-- **Redesign (Run 2).** The rail follows the creator flow: Video → Subtítulos → Texto → Estilo → Efectos → Exportar.
-  - Global CSS is split into `src/styles/*.css` with the existing tokens.
-  - `App.tsx` state moves into custom hooks.
-  - Heavy panels load lazily.
-  - Rejected: Tailwind, shadcn and zustand. They need packages that cannot be installed safely, and a rewrite adds no value to the user.
-
-## Risks and edge cases
-- Remotion's custom ffmpeg may lack `libmp3lame`. `extractAudio` falls back to WAV 16 kHz mono and stops with `El audio es muy largo para Groq (máx. 13 min en WAV).` when over 25 MB.
-- Large `inputProps` (about 2 MB for 400 layers). Raise the body limit to 16 MB. If Remotion warns about prop size, record it and check AC31.
-- localStorage is about 5 MB. A 400-layer autosave can fail, and «Sin guardar» shows it. IndexedDB autosave is deferred.
-- Source fps (29.97/60) differs from the 30 fps composition. OffthreadVideo samples by time, so the drift is negligible. Burn-in keeps the chosen format with a cover crop, the same as the preview.
-- Whisper words carry no punctuation. Recover it by aligning `words` to the `text` tokens with a lookahead of 3, and keep the raw word on a mismatch.
-- Clips shorter than in+out: the exit starts at `max(in, duration − out)`.
-- A video with no audio stream: transcription fails with `Ese video no tiene audio.` (422).
-- Restarting the dev server (for example after editing `.env.local`) loses in-flight jobs. The UI already shows a controlled error.
-- A transcription cancelled after upload may still be billed. The UI says so.
-- 400 timeline rows in Run 1 are heavy. Run 2's windowed compact lane fixes it.
-
-## Implementation steps
-**Phase 0: safety and baseline.**
-1. Copy the set listed under Files to touch into `backups/before-redesign-20261003/` with PowerShell `Copy-Item -Recurse`.
-2. Run AC2–AC4 and `render-editor-smoke.mjs green`. Append failures to B-list as B17+.
-
-**Phase 1: fixes (B1–B8, B11–B12, B15–B16 client parts).**
-1. Update `App.savePreset`:
-   - `kind==='combo'` pushes a `ComboPreset` `{id:'custom-combo-<ts>', name, description:'Combinación guardada por vos.', typography, animation: cloneAnimation(activeAnimation), custom:true}` into new state from `loadCustomComboPresets`, persisted with `saveCustomComboPresets`;
-   - Estilo «Combinaciones» lists built-in plus custom, with a delete button for custom ones.
-2. In `deleteMotionPreset`, map `animation.in` with a matching id to `{preset: defaultPreset, overrides: overridesFor(defaultPreset)}` and `animation.out` with a matching id to `null`.
-3. Add to `src/utils/editor.ts`:
-   - `MAX_LAYERS = 400`;
-   - `remapWordTiming(before: string, after: string, timing: WordTiming, durationFrames: number): WordTiming | undefined`:
-     - matching follows the same LCS as `remapKeywords`; matched words keep start/end;
-     - each run of new words splits the span between its matched neighbors evenly;
-     - deleted words merge into the previous word;
-     - the result is monotonic, each word ≥1 frame, and the last end equals the duration;
-     - when the words don't fit, it falls back to `evenWordTiming`, and to undefined for empty text;
-   - `splitWordTiming(timing, cutLocalFrame): [WordTiming|undefined, WordTiming|undefined]`.
-4. App wiring:
-   - `onText` uses `remapWordTiming`;
-   - `splitLayer` cuts at the first word with `start >= localFrame` when timing exists (otherwise today's proportional rule) and assigns both halves.
-5. Update `EditorHistory`:
-   - `observe` compares `Object.keys(next)` values with `Object.is` against the current snapshot and stores references;
-   - `undo`, `redo` and `reset` keep `structuredClone` on their outputs.
-6. In `textLayout.ts`, measure `t.uppercase ? text.toLocaleUpperCase('es') : text`, and add `uppercase` and `fontWeight` to the cache key.
-7. In `layerAnimation.getAnimationPhase`, when `typeof layer.durationFrames==='number'` and `animation.out` exists, use effective hold `max(0, durationFrames − in − out)`. Auto clips keep `holdFrames`.
-8. In `pickGuide`, call `probe.removeAttribute('src'); probe.load()` in a `finally` block.
-9. In `CanvasOverlay`, render only the active layer and the layers whose window contains `currentFrame`.
-
-**Phase 2: server foundation and media.**
-1. `server/http.ts`:
-   - `readBody(req, limitBytes): Promise<Buffer>` collects Buffers. Over the limit it calls `req.destroy()` and rejects with `{status:413}`;
-   - `readJson` = `JSON.parse(buf.toString('utf8'))`;
-   - `json()`;
-   - `isAllowedOrigin(origin: string|undefined, port: number): boolean`;
-   - `parseRange(header, size): {start,end}|null|'invalid'`.
-2. `server/ffmpeg.ts`:
-   - `binDir()` checks env `GB_FFMPEG_DIR` first, then `node_modules/.pnpm/@remotion+compositor-win32-x64-msvc@*/node_modules/@remotion/compositor-win32-x64-msvc`;
-   - spawn with `cwd: binDir()` so the DLLs resolve;
-   - `probe(file): Promise<{durationSec,width,height,hasAudio}>` uses `ffprobe -v error -print_format json -show_format -show_streams`;
-   - `extractAudio(file, out): Promise<string>` uses `-vn -ac 1 -ar 16000 -c:a libmp3lame -b:a 64k`, with the WAV fallback.
-3. `server/media.ts`:
-   - `POST /api/media` streams the raw body to `<uuid>.<ext>`. Allowed extensions: mp4, mov, m4v, webm, mkv, taken from `X-File-Name`. The cap is 4 GB.
-   - It then probes the file. On failure it unlinks the file and returns 422 (AC19).
-   - Success returns 201 `{mediaId, name, durationInFrames: round(sec*30), width, height, hasAudio}`.
-   - `GET|HEAD /media/:id` checks the id against `^[0-9a-f-]{36}\.(mp4|mov|m4v|webm|mkv)$` and supports Range (206 / 416).
-4. `server/render.ts`:
-   - move `startRender` and the jobs into it;
-   - `isSupportedFormat(f)` matches `formats` by id **and** size;
-   - an active job leads to 409 (AC16);
-   - `ExportKind = 'mp4'|'green'|'alpha'|'burn'`;
-   - `burn` requires `media:{mediaId, volume}` and sets `props.guide = {src: <server URL>, name, durationInFrames: probed, volume}`;
-   - other kinds delete `props.guide`;
-   - filename `gb-motion-<kind>-<ts>.<ext>`.
-5. `server/plugin.ts` routes everything. It applies the origin check to POST and DELETE under `/api/`, returning 403 `{error:'Origen no permitido'}`.
-6. `vite.config.ts`:
-   - `defineConfig(({mode}) => …)` with `const env = loadEnv(mode, process.cwd(), '')`;
-   - pass `{elevenlabsKey, groqKey, provider, mediaDir, mock}` to the plugin;
-   - `server.watch.ignored: ['**/exports/**','**/media/**','**/backups/**']`;
-   - add `server/**` to `tsconfig.node.json`.
-7. Client:
-   - `src/utils/mediaClient.ts` provides `uploadMedia(file, onProgress): Promise<MediaInfo>` through XHR;
-   - add `mediaId?: string` to `VideoGuide`; the project stores `guideMediaId`;
-   - on load, `HEAD /media/<id>`, and if OK, set the guide with `src:'/media/<id>'`;
-   - revoke only `blob:` URLs;
-   - GuidePanel shows «Subiendo… N%», then «Video guardado».
-
-**Phase 3: burned-in export.**
-1. `Root.calculateMetadata` uses `Math.max(getCompositionDuration(layers), props.guide?.durationInFrames ?? 0)`.
-2. `TextComposition` renders `isRendering ? <OffthreadVideo src volume style/> : <Video …/>` (same cover style).
-3. `OutputPanel`:
-   - a primary card «Video con tus subtítulos» (kind `burn`), disabled without `guide.mediaId` and showing the AC23 hint;
-   - a range «Volumen del audio original» (0–100%, default 100), separate from the preview volume;
-   - past-export label «Con video» for `-burn-`.
-4. `exportVideo(kind)` sends `media` for `burn`.
-
-**Phase 4: AI subtitles and highlight modes.**
-1. `src/captions/types.ts`: `TimedWord {text,startMs,endMs,confidence:number|null}`, `CaptionPage {text,startMs,endMs,words:TimedWord[]}`, `GroupOptions`.
-2. `src/captions/group.ts`: `groupWords(words, opts): CaptionPage[]`.
-   - Defaults: maxWords 3 (1–8), maxChars 20 (8–42), breakOnSilenceMs 500, breakOnPunctuation true, maxDurationMs 3000, minDurationMs 300.
-   - Break after `[.?!…]`, and after `[,;:]` once the page has 2 or more words.
-   - `removeFillers` drops eh/ehh/em/emm/ehm/mm/mmm/hmm/ah/ahh. The meaningful "este", "bueno" and "o sea" are not removed.
-3. `src/captions/toLayers.ts`: `pagesToLayers(pages, template: TextLayer, createId): TextLayer[]`.
-   - Each layer is cloned from the template: text, name, `startFrame=round(ms*0.03)`, `durationFrames`.
-   - Its end extends to the next start when the gap is ≤250 ms; otherwise it is `+200 ms`, never overlapping.
-   - `wordTiming` takes `{mode, color}` from the template (default `color` `#ffe94a`) with contiguous relative frames.
-   - Keywords are reset to `{}`.
-4. `src/captions/providers.ts`: `fromElevenLabs(json)` (type `word` only, `confidence=exp(logprob)`) and `fromGroq(json)` (with punctuation recovery).
-5. `server/transcribe.ts`, with jobs like the render.
-   - `GET /api/transcribe/providers`.
-   - `POST /api/transcribe {mediaId, language:'es'|'auto'|'en'|'pt', provider?}` returns 202 `{jobId}`, 412 `missing_key`, or 422 for no audio.
-   - `GET/DELETE /api/transcribe/:id` reports or cancels a job. Stages: `extracting`, `uploading`, `transcribing`, `done`, `error`.
-   - ElevenLabs: `POST https://api.elevenlabs.io/v1/speech-to-text`, header `xi-api-key`, form `model_id=scribe_v2`, `language_code`, `timestamps_granularity=word`, `tag_audio_events=false`, `file`.
-   - Groq: `POST https://api.groq.com/openai/v1/audio/transcriptions`, Bearer, `model=whisper-large-v3`, `response_format=verbose_json`, `timestamp_granularities[]=word`, `language`.
-   - Requests use `AbortSignal.timeout(600000)`.
-   - Errors map to Spanish: 401/403 «La clave de X no es válida.»; 429 «Límite de uso de X. Probá en unos minutos.»; 413 too long; network «Sin conexión con X.».
-   - Results are cached in `<mediaDir>/<mediaId>.<provider>.<lang>.json`.
-   - `GB_TRANSCRIBE_MOCK=1` serves `scripts/fixtures/elevenlabs-es.json`.
-6. `AutoCaptionsPanel` (inside «Video»):
-   - language; provider (configured ones only); «Palabras por subtítulo»; «Máx. caracteres»; «Cortar en pausas»; «Quitar muletillas»;
-   - «Resaltado» with the 5 modes and a color; «Usar el look de la frase seleccionada»;
-   - «Reemplazar / Agregar» (replace keeps locked layers);
-   - «Generar subtítulos», progress with «Cancelar», errors in `role=alert`.
-   - Applying runs as one `recordHistory()` step, with the AC31 capacity check.
-7. `src/engine/wordHighlight.ts`: `wordHighlightCss(timing, wordIndex, localFrame, paint): CSSProperties`.
-   - Use it in all three paths of `TextComposition`: text-mode `richText`, unit spans, and `ReadableEffect.wordStyle`.
-   - Add the 5 options to `WordTimingPanel`.
-   - Accept the new modes in `project.ts` sanitize.
-8. Add the validators, fixtures, `.env.example` (keys commented out), `.gitignore`, the `package.json` `test` entry, and README.
-
-**Phase 5 (Run 2): redesign.**
-1. Extract hooks from `App.tsx` with no behavior change, and re-run AC2–AC4.
-2. Rail with 6 tools. «Subtítulos» = `SubtitlesPanel`:
-   - virtualized list using `content-visibility:auto`;
-   - per row: time (seek), editable text (remap), «Unir con la siguiente», delete;
-   - find and replace as one undo step;
-   - CaptionTools moved here.
-3. `EmptyState`, «Proyecto» menu, Space shortcut, `SafeZoneOverlay` (Ninguna/TikTok/Reels, preview only).
-4. TimelineDock «Subtítulos | Pistas» toggle. The compact lane renders only clips within the visible range and keeps drag, resize, fx handles, split and lock.
-5. Split the CSS into `src/styles/{tokens,layout,controls,panels,timeline,canvas,modal}.css`. Keep the token names and refresh spacing, typography and contrast.
-6. Load `LibraryPanel`, `SavePresetModal`, `KeyframePanel` and `MotionPreview` with `React.lazy`, and add `build.rollupOptions.output.manualChunks` for `remotion`/`@remotion/player`.
-
-**Phase 6 (Run 2):** «Aplicar plantilla a todos» (AC41), then the AC33 inventory walkthrough.
-
-## Open questions and assumptions
-- **Run split.** Run 1 = Phases 0–4 (AC1–AC31); Run 2 = Phases 5–6 (AC32–AC42). One pass is too big to keep green. Assumed approved.
-- **API keys.** The user must create an ElevenLabs key (Starter $6/month) and/or a free Groq key. Without one, AC29 is BLOCKED; everything else is testable with the mock.
-- **Burn-in output** uses the chosen format with a cover crop and 30 fps; native resolution is not kept.
-- **Media folder** defaults outside OneDrive (`%LOCALAPPDATA%\gb-motion\media`). «Quitar el video» unlinks but does not delete the copy; cleanup is manual and documented.
-- **Planning limit.** No shell was available during planning, so the B-list comes from code and audits. Phase 0 confirms it at runtime.
+## Preguntas abiertas y supuestos
+1. **Deploy público ahora:** ¿se publica la landing + editor degradado en un hosting estático en esta corrida (¿cuál?), o sólo queda listo? ¿Cómo consigue un visitante la versión local (repo público + instrucciones / «próximamente»)? Supuesto: queda listo, sin publicar.
+2. **Titular y copy final:** los textos marcados BORRADOR. Supuesto: rioplatense «vos».
+3. **Stills de estilos:** ¿OK usar un turno de render para 8 stills? Si no, las tarjetas van sin imagen.
+4. **Frase en el handoff landing→editor** (fragmento, nunca query, se borra al leer): supuesto sí por defecto.
+5. **Launcher:** sigue en Vite dev abriendo `/editor/`; ¿preferís que use `npm start` (requiere build previo)?
+6. **Redes en el footer:** usuarios de X/IG/TikTok.
+7. **Comparativa con competidores:** pospuesta (datos con fecha y fuente) a F4.
+8. **F4:** modelo (beta/freemium), hosting y techo mensual, dominio, quién paga la transcripción; licencia Remotion gratis mientras el equipo sea ≤3 (hoy 1).
+- Supuestos: A3 es el estado real; mock no prueba precisión STT (AC29 histórico sigue BLOCKED sin clave); Safari pendiente.
 
 ## Memory
-- Decision records to write once approved:
-  - Scribe v2 as primary STT, with Groq whisper-large-v3 as the alternative and keys server-side only.
-  - Media uploaded to a local dir outside OneDrive and served to the render by server-resolved URL.
-  - No new npm packages; never run pnpm install (the lockfile lacks the hand-unpacked fonts).
-  - Captions mapped onto `TextLayer` + `wordTiming`.
-- Lessons seeded now in `docs/lessons-learned.md`: 3 render lessons. The others stay in Constraints.
+- Decisiones candidatas (se registran al cerrar la corrida, no ahora):
+  - 0007 Landing y editor como Vite MPA (`/`, `/editor/`, `404.html`), sin router ni shell; la demo no toca autosave.
+  - 0008 Runtime Node local de producción con handler reutilizable (`server/app.ts`), loopback, `GET /api/health` v1 y `useServerCapabilities`; Vite queda como adaptador de dev.
+  - 0009 Ownership exclusivo Claude/Codex por archivo con commit de contratos primero (incluye `vite.config.ts` sólo Codex).
+  - 0010 Handoff/compartir estilo por fragmento validado (v1, ≤4096, presets por id), nunca query ni proyecto completo.
+  - 0011 Exports publicados por rename atómico; `.partial-*` nunca listados.
+- Lecciones candidatas: un build estático no valida media/render/STT (probar por modo de ejecución); el primer bundling de Remotion bloquea el event loop >15 s, no usar health con timeout corto durante exports; botones de galería deben anunciar el nombre, no la muestra.
