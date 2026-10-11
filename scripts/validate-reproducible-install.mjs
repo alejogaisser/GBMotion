@@ -22,8 +22,8 @@ const inside = (root, path) => {
   const part = relative(root, path);
   return part !== '' && !isAbsolute(part) && part !== '..' && !part.startsWith(`..${sep}`);
 };
-const run = (command, args, cwd, env = process.env) => {
-  const result = spawnSync(command, args, {cwd, env, encoding:'utf8', windowsHide:true, maxBuffer:16 * 1024 * 1024});
+const run = (command, args, cwd, env = process.env, extra = {}) => {
+  const result = spawnSync(command, args, {cwd, env, encoding:'utf8', windowsHide:true, maxBuffer:16 * 1024 * 1024, ...extra});
   if (result.stdout) process.stdout.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
   assert.equal(result.error, undefined, result.error?.message);
@@ -40,7 +40,7 @@ const quoteCmd = value => {
   return `"${value}"`;
 };
 const pnpmRun = (args, env) => process.platform === 'win32' && /\.(cmd|bat)$/i.test(pnpm)
-  ? run(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', `"${[pnpm, ...args].map(quoteCmd).join(' ')}"`], snapshot, env)
+  ? run(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', `"${[pnpm, ...args].map(quoteCmd).join(' ')}"`], snapshot, env, {windowsVerbatimArguments:true})
   : run(pnpm, args, snapshot, env);
 
 try {
