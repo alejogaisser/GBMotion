@@ -50,7 +50,7 @@ const SavePresetModal = lazy(() => import('./components/SavePresetModal').then((
 const KeyframePanel = lazy(() => import('./components/KeyframePanel').then((module) => ({ default: module.KeyframePanel })));
 
 /** Se pone en true cuando `useExport` y el servidor aceptan el kind `alpha-webm` (AC27 PASS, lado Codex). */
-const ALPHA_WEBM_READY = false;
+const ALPHA_WEBM_READY = true;
 
 type Tool = 'video' | 'subtitulos' | 'texto' | 'estilo' | 'movimiento' | 'salida';
 
