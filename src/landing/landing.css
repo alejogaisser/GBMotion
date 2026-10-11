@@ -189,6 +189,17 @@ a { color: inherit; }
 .frame-track { position: absolute; left: 10px; top: 8px; z-index: 2; font-size: 1rem; color: var(--hueso); mix-blend-mode: normal; text-shadow: 0 0 4px #000; }
 .frame[data-bg='checker'] .frame-track, .frame[data-bg='green'] .frame-track { color: var(--negro); text-shadow: none; }
 .frame .look { position: absolute; inset: 0; }
+/* Isla del hero (motor real): reemplaza la vista estática sin cambiar el tamaño del marco. */
+.frame-player { position: absolute; inset: 0; z-index: 1; visibility: hidden; }
+.frame[data-island-state='ready'] .frame-player { visibility: visible; }
+.frame[data-island-state='ready'] .look { display: none; }
+.hero-player { position: absolute; inset: 0; }
+.hero-playtoggle {
+  position: absolute; right: 8px; bottom: 8px; z-index: 3; min-height: 40px; padding: 0 12px;
+  background: var(--negro); border: 1px solid var(--hueso); border-radius: 2px; color: var(--hueso);
+  font-family: var(--f-mono); font-size: 1rem; cursor: pointer;
+}
+.hero-playtoggle:hover { border-color: var(--lima); color: var(--lima); }
 .frame-loading { position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; font-family: var(--f-mono); font-size: 1rem; color: var(--lima); }
 .frame[data-bg='green'] .frame-loading, .frame[data-bg='checker'] .frame-loading { color: var(--negro); }
 
