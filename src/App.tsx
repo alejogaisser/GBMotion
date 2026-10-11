@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
 import {
-  Captions, Check, Clapperboard, Download, Film, FolderOpen, HardDriveDownload, Palette, Pause, Play, Redo2, RotateCcw, Save, Sliders, Type, Undo2, Volume2, VolumeX, Zap,
+  Captions, Check, Clapperboard, Download, Film, FolderOpen, HardDriveDownload, Loader2, Palette, Pause, Play, Redo2, RotateCcw, Save, Sliders, Type, Undo2, Volume2, VolumeX, Zap,
 } from 'lucide-react';
 import { WordTimingPanel } from './components/WordTimingPanel';
 import { alignLayers, distributeLayers } from './engine/editorMotion';
@@ -12,7 +12,12 @@ import { MotionPanel } from './components/MotionPanel';
 import { TextPanel } from './components/TextPanel';
 import { OutputPanel } from './components/OutputPanel';
 import { GuidePanel } from './components/GuidePanel';
-import { AutoCaptionsPanel } from './components/AutoCaptionsPanel';
+import { AutoCaptionsPanel, stageText } from './components/AutoCaptionsPanel';
+import { CaptionReviewPanel } from './components/CaptionReviewPanel';
+import { DesktopOnlyNotice } from './components/DesktopOnlyNotice';
+import { HandoffDialog, type HandoffScope } from './components/HandoffDialog';
+import { capabilityReason, ServerStatus } from './components/ServerStatus';
+import { TemplatePicker, type TemplateScope } from './components/TemplatePicker';
 import { SubtitlesPanel } from './components/SubtitlesPanel';
 import { EmptyState } from './components/EmptyState';
 import { SafeZoneOverlay, safeZoneLabels, type SafeZone } from './components/SafeZoneOverlay';
@@ -22,15 +27,20 @@ import type { SavePresetKind } from './components/SavePresetModal';
 import { TextComposition } from './remotion/TextComposition';
 import { formats, overridesFor } from './remotion/defaults';
 import { builtInPresets, defaultPreset } from './presets/builtins';
+import { applyTemplate, applyTemplateToLayers, captionTemplates, type CaptionTemplate } from './presets/templates';
+import { reviewCaptions, type CaptionIssue } from './engine/captionReview';
+import { applyHandoffToLayer, buildStyleLink, checkStyleShare, parseHandoffFragment, type HandoffV1, type StylePayloadV1 } from './utils/handoff';
 import { builtInStylePresets } from './presets/styles';
 import { resolvePreset } from './engine/resolvePreset';
 import { animationForLayer } from './engine/layerAnimation';
 import { cloneAnimation, cloneLayer, MAX_LAYERS } from './utils/editor';
-import { getCompositionDuration } from './utils/duration';
+import { getCompositionDuration, getLayerDuration } from './utils/duration';
 import { loadCustomComboPresets, loadCustomPresets, loadCustomStylePresets, loadFavorites, saveCustomComboPresets, saveCustomPresets, saveCustomStylePresets, saveFavorites } from './utils/storage';
 import { loadProject, parseProjectFile } from './utils/project';
 import { useGuide } from './hooks/useGuide';
 import { useExport } from './hooks/useExport';
+import { useServerCapabilities } from './hooks/useServerCapabilities';
+import { useTranscription } from './hooks/useTranscription';
 import { createLayerId, useProject, withText } from './hooks/useProject';
 import type { AnimationMode, ComboPreset, CompositionProps, KeywordStyle, MotionPreset } from './types/motion';
 
@@ -38,6 +48,9 @@ import type { AnimationMode, ComboPreset, CompositionProps, KeywordStyle, Motion
 const LibraryPanel = lazy(() => import('./components/LibraryPanel').then((module) => ({ default: module.LibraryPanel })));
 const SavePresetModal = lazy(() => import('./components/SavePresetModal').then((module) => ({ default: module.SavePresetModal })));
 const KeyframePanel = lazy(() => import('./components/KeyframePanel').then((module) => ({ default: module.KeyframePanel })));
+
+/** Se pone en true cuando `useExport` y el servidor aceptan el kind `alpha-webm` (AC27 PASS, lado Codex). */
+const ALPHA_WEBM_READY = true;
 
 type Tool = 'video' | 'subtitulos' | 'texto' | 'estilo' | 'movimiento' | 'salida';
 
@@ -103,6 +116,15 @@ export default function App() {
     observer.observe(element); return () => observer.disconnect();
   }, []);
 
+  // Sube cuando se reemplaza el proyecto; junto con el id del video identifica la sesión de subtítulos automáticos.
+  const [projectSession, setProjectSession] = useState(0);
+  const busyRef = useRef(false);
+  const server = useServerCapabilities({ isBusy: () => busyRef.current });
+  const [subTab, setSubTab] = useState<'guion' | 'revision'>('guion');
+  const [handoffRequest, setHandoffRequest] = useState<HandoffV1 | null>(null);
+  const [handoffError, setHandoffError] = useState(false);
+  const handoffRead = useRef(false);
+
   const guideApi = useGuide({ initialMediaId: restored?.guideMediaId, initialName: restored?.guideName, flashHint });
   const { guide, setGuide, guideName, guideMediaId, guideUpload, pickGuide, removeGuide, relinkGuide } = guideApi;
 
@@ -112,7 +134,7 @@ export default function App() {
     restored, guideName, guideMediaId, flashHint,
     onEdited: () => editedRef.current(),
     onProjectReplaced: () => {
-      seekTargetFrame.current = null; removeGuide();
+      seekTargetFrame.current = null; removeGuide(); setProjectSession((value) => value + 1);
       playerRef.current?.seekTo(0); setCurrentFrame(0);
     },
     onRelink: (mediaId, name) => void relinkGuide(mediaId, name),
@@ -126,9 +148,12 @@ export default function App() {
   const activeAnimation = animationForLayer(activeLayer);
 
   const inputProps: CompositionProps = { layers, background, customBackground, guide };
-  const exportApi = useExport({ inputProps, background, format, guideMediaId, guideName: guide?.name });
+  const renderReason = capabilityReason(server, 'render');
+  const exportApi = useExport({ inputProps, background, format, guideMediaId, guideName: guide?.name, enabled: renderReason === null });
   editedRef.current = exportApi.resetExportState;
   const { exportState, pastExports, exportVolume, setExportVolume, exportVideo, cancelExport } = exportApi;
+  busyRef.current = exportState.status === 'rendering';
+  const uploadReason = capabilityReason(server, 'upload');
 
   const presets = useMemo(() => [...builtInPresets, ...customPresets], [customPresets]);
   const stylePresets = useMemo(() => [...builtInStylePresets, ...customStylePresets], [customStylePresets]);
@@ -219,6 +244,87 @@ export default function App() {
     const problem = project.applyAutoCaptions(created, mode);
     if (!problem) setShowEmpty(false);
     return problem;
+  };
+
+  const transcription = useTranscription({
+    sessionKey: `${projectSession}:${guideMediaId}`, mediaId: guideMediaId, templateLayer: activeLayer, createId: createLayerId, onApply: applyAutoCaptions,
+  });
+  const transcribeReason = capabilityReason(server, 'transcribe') ?? (guideMediaId ? null : 'Primero subí un video.');
+
+  const reviewIssues = useMemo(() => reviewCaptions(layers, 30), [layers]);
+  const jumpToIssue = (issue: CaptionIssue) => { selectLayer(issue.layerId); seek(issue.startFrame); };
+  const captionCount = layers.filter((layer) => layer.visible && layer.text.trim()).length;
+
+  const pickVideo = (file: File) => {
+    if (uploadReason) { flashHint(uploadReason); return; }
+    void pickGuide(file);
+  };
+
+  const applyNamedTemplate = (template: CaptionTemplate, scope: TemplateScope) => {
+    recordHistory();
+    if (scope === 'all') {
+      setLayers((current) => applyTemplateToLayers(current, template));
+      editedRef.current();
+      flashHint(`«${template.name}» aplicada a las frases desbloqueadas. Ctrl+Z lo deshace.`);
+      return;
+    }
+    updateActive((layer) => applyTemplate(layer, template));
+    flashHint(`«${template.name}» aplicada. Ctrl+Z lo deshace.`);
+  };
+
+  // Traspaso de la landing (#demo=) o de un enlace compartido (#estilo=). Se lee una vez y se borra del historial.
+  useEffect(() => {
+    if (handoffRead.current) return;
+    handoffRead.current = true;
+    const fragment = parseHandoffFragment(window.location.hash);
+    if (!fragment) return;
+    try { window.history.replaceState(null, '', window.location.pathname + window.location.search); } catch { /* el hash queda, pero ya no se vuelve a leer */ }
+    if (!fragment.result.ok) { setHandoffError(true); return; }
+    const value = fragment.result.value;
+    if (restored) { setHandoffRequest(value); return; }
+    setLayers((current) => current.map((layer, index) => index === 0
+      ? applyHandoffToLayer(layer, value.style, { phrase: value.phrase, keepFontSize: false, hold: 'payload', createWordTiming: true })
+      : layer));
+    flashHint('Estilo aplicado a tu frase inicial.');
+  }, []);
+  useEffect(() => {
+    if (!handoffError) return;
+    const timer = setTimeout(() => setHandoffError(false), 12000);
+    return () => clearTimeout(timer);
+  }, [handoffError]);
+
+  const applyHandoffRequest = (scope: HandoffScope, addPhrase: boolean) => {
+    const request = handoffRequest;
+    setHandoffRequest(null);
+    if (!request) return;
+    if (scope === 'active' && activeLayer.locked && !addPhrase) { flashHint('La frase está bloqueada: no se cambió nada.'); return; }
+    const style = request.style;
+    recordHistory();
+    setLayers((current) => {
+      const next = current.map((layer) => layer.locked || (scope === 'active' && layer.id !== activeLayer.id) ? layer : applyHandoffToLayer(layer, style));
+      if (addPhrase && request.phrase && current.length < MAX_LAYERS) {
+        const end = Math.max(0, ...current.map((layer) => layer.startFrame + getLayerDuration(layer)));
+        next.push({
+          ...applyHandoffToLayer(cloneLayer(activeLayer), style, { phrase: request.phrase, createWordTiming: true }),
+          id: createLayerId(), startFrame: end, locked: false, visible: true, transformKeys: undefined,
+        });
+      }
+      return next;
+    });
+    editedRef.current();
+    flashHint('Estilo aplicado. Ctrl+Z lo deshace.');
+  };
+
+  const shareCheck = useMemo(() => checkStyleShare(activeLayer), [activeLayer.typography, activeLayer.animation, activeLayer.preset, activeLayer.overrides, activeLayer.wordTiming]);
+  const copyStyleLink = async (payload: StylePayloadV1) => {
+    const link = buildStyleLink(payload, window.location.origin);
+    if (!link.ok) { flashHint(link.reason); return; }
+    try {
+      await navigator.clipboard.writeText(link.url);
+      flashHint('Enlace de estilo copiado. No lleva tu texto ni tus tiempos.');
+    } catch {
+      flashHint('No pude copiar al portapapeles. Probá de nuevo desde la pestaña activa.');
+    }
   };
 
   useEffect(() => {
@@ -317,6 +423,7 @@ export default function App() {
     <div className="app" style={{ '--panel-width': `${panelWidth}px`, '--timeline-height': `${timelineHeight}px` } as React.CSSProperties} onPointerDownCapture={recordHistory} onFocusCapture={recordHistory}
       onKeyDownCapture={(event) => { if (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) recordHistory(); }}>
       <header className="topbar">
+        <a className="back-link" href="/" title="Volver a la página de GB Motion">← GB Motion</a>
         <span className="brand"><span className="brand-mark"><Film size={15} /></span>GB <b>MOTION</b></span>
         <div className="topbar-group">
           <div className="project-menu">
@@ -332,9 +439,16 @@ export default function App() {
           <button type="button" className="icon-button" aria-label="Deshacer" title="Deshacer (Ctrl+Z)" disabled={!historyStatus.undo} onClick={undo}><Undo2 size={16} /></button>
           <button type="button" className="icon-button" aria-label="Rehacer" title="Rehacer (Ctrl+Shift+Z)" disabled={!historyStatus.redo} onClick={redo}><Redo2 size={16} /></button>
           <input className="project-name" aria-label="Nombre del proyecto" value={projectName} maxLength={80} onChange={(event) => setProjectName(event.target.value)} />
+          {transcription.running && transcription.stage && (
+            <span className="task-chip" role="status" aria-live="polite">
+              <Loader2 size={12} className="spin" aria-hidden="true" /> Subtítulos: {stageText[transcription.stage]}
+              <button type="button" className="linklike" onClick={transcription.cancel}>Cancelar</button>
+            </span>
+          )}
           <span title={projectSaved === null ? 'No se pudo guardar. Descargá el proyecto como respaldo.' : 'Guardado en este navegador'} className={`saved ${projectSaved ? 'on' : ''}`}>{projectSaved ? <><Check size={12} /> Guardado</> : projectSaved === null ? 'Sin guardar' : 'Guardando…'}</span>
         </div>
         <div className="topbar-right">
+          <ServerStatus server={server} busy={exportState.status === 'rendering'} />
           <button className="ghost-button" onClick={() => setLibraryOpen(true)}>Biblioteca</button>
           <button type="button" className={`icon-button ${advanced ? 'on' : ''}`} aria-pressed={advanced}
             title={advanced ? 'Ajustes finos activados' : 'Mostrar ajustes finos'} aria-label="Ajustes finos" onClick={() => setAdvanced((value) => !value)}>
@@ -404,7 +518,7 @@ export default function App() {
             </div>
             {showEmpty && !guide && (
               <EmptyState
-                onPickVideo={(file) => { setShowEmpty(false); setTool('video'); void pickGuide(file); }}
+                onPickVideo={(file) => { setShowEmpty(false); setTool('video'); pickVideo(file); }}
                 onWriteByHand={() => { setShowEmpty(false); setTool('texto'); }}
               />
             )}
@@ -437,14 +551,26 @@ export default function App() {
                   upload={guideUpload}
                   expectedName={guideName}
                   formatLabel={format.label}
-                  onPick={(file) => void pickGuide(file)}
+                  onPick={pickVideo}
+                  uploadBlockedReason={uploadReason}
                   onVolume={(volume) => setGuide((current) => current ? { ...current, volume } : current)}
                   onRemove={removeGuide}
                 />
-                <AutoCaptionsPanel mediaId={guideMediaId} templateLayer={activeLayer} createId={createLayerId} onApply={applyAutoCaptions} />
+                <AutoCaptionsPanel model={transcription} disabledReason={transcribeReason} />
               </>
             )}
             {tool === 'subtitulos' && (
+              <div className="segmented review-tabs" role="group" aria-label="Guion o revisión">
+                <button type="button" className={subTab === 'guion' ? 'on' : ''} aria-pressed={subTab === 'guion'} onClick={() => setSubTab('guion')}>Guion</button>
+                <button type="button" className={subTab === 'revision' ? 'on' : ''} aria-pressed={subTab === 'revision'} onClick={() => setSubTab('revision')}>
+                  Revisión{reviewIssues.length > 0 && <span className="review-badge" aria-label={`${reviewIssues.length} avisos`}>{reviewIssues.length}</span>}
+                </button>
+              </div>
+            )}
+            {tool === 'subtitulos' && subTab === 'revision' && (
+              <CaptionReviewPanel issues={reviewIssues} layers={layers} activeId={activeLayer.id} onJump={jumpToIssue} />
+            )}
+            {tool === 'subtitulos' && subTab === 'guion' && (
               <SubtitlesPanel
                 layers={layers}
                 activeId={activeLayer.id}
@@ -485,6 +611,7 @@ export default function App() {
             )}
             {tool === 'estilo' && (
               <>
+                <TemplatePicker templates={captionTemplates} activeLocked={activeLayer.locked} unlockedCount={layers.filter((layer) => !layer.locked).length} onApply={applyNamedTemplate} />
                 <details className="tuner template-picker"><summary>Combinaciones listas para usar</summary><div className="tuner-block template-list">
                   {[...builtInComboPresets, ...customCombos].map((combo) => <span className="combo-item" key={combo.id}>
                     <button className="ghost-button" title={combo.description} onClick={() => updateActive((l) => ({ ...l, typography: structuredClone(combo.typography), animation: cloneAnimation(combo.animation), preset: combo.animation.in?.preset ?? l.preset, overrides: combo.animation.in?.overrides ?? l.overrides }))}>{combo.name}</button>
@@ -508,6 +635,19 @@ export default function App() {
                   typography={activeLayer.typography}
                   onChange={(patch) => updateActive((layer) => ({ ...layer, typography: { ...layer.typography, ...patch } }))}
                 />
+                <div className="panel-block share-style">
+                  <h3>Compartir estilo</h3>
+                  <p className="hint">El enlace lleva el look, los efectos de fábrica y el resaltado. Nunca tu texto, tus tiempos ni tu video.</p>
+                  <button type="button" className="ghost-button" disabled={shareCheck.mode !== 'full'} title={shareCheck.mode === 'full' ? undefined : shareCheck.reason}
+                    onClick={() => { if (shareCheck.mode === 'full') void copyStyleLink(shareCheck.payload); }}>Copiar enlace de estilo</button>
+                  {shareCheck.mode !== 'full' && <p className="hint blocked-reason" role="status">{shareCheck.reason}</p>}
+                  {shareCheck.mode === 'look-only' && (
+                    <>
+                      <button type="button" className="ghost-button" onClick={() => void copyStyleLink(shareCheck.payload)}>Compartir sólo el look</button>
+                      <p className="hint">Quien lo abra recibe la letra y el resaltado, pero conserva sus propios efectos.</p>
+                    </>
+                  )}
+                </div>
               </>
             )}
             {tool === 'movimiento' && (
@@ -548,6 +688,10 @@ export default function App() {
                 onCustomBackground={setCustomBackground}
                 onExport={exportVideo}
                 onCancel={cancelExport}
+                renderBlockedReason={renderReason}
+                captionCount={captionCount}
+                alphaWebm={ALPHA_WEBM_READY}
+                onCaptions={project.downloadCaptions}
               />
             )}
           </div>
@@ -575,6 +719,23 @@ export default function App() {
         onToggleLock={(id) => updateLayer(id, (layer) => ({ ...layer, locked: !layer.locked }))}
       />
 
+      {handoffRequest && (
+        <HandoffDialog
+          handoff={handoffRequest}
+          baseLayer={activeLayer}
+          unlockedCount={layers.filter((layer) => !layer.locked).length}
+          canAddPhrase={layers.length < MAX_LAYERS}
+          onApply={applyHandoffRequest}
+          onCancel={() => setHandoffRequest(null)}
+        />
+      )}
+      {handoffError && (
+        <div className="handoff-alert" role="alert">
+          <span>Ese enlace de estilo no es válido o es de otra versión.</span>
+          <button type="button" className="linklike" onClick={() => setHandoffError(false)}>Cerrar</button>
+        </div>
+      )}
+      <DesktopOnlyNotice />
       <Suspense fallback={null}>
         {libraryOpen && <LibraryPanel project={project.projectState} layer={activeLayer} onClose={() => setLibraryOpen(false)}
           onOpen={(p) => { const parsed = parseProjectFile(JSON.stringify(p)); if (!parsed) { flashHint('El proyecto guardado no es válido.'); return; } project.openParsed(parsed); }}

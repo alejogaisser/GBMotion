@@ -14,7 +14,14 @@
     "render:demo": "remotion render src/remotion/index.ts GBMotion exports/gb-motion-demo.mp4 --props=src/remotion/demo-props.json",
     "test:editor": "node --experimental-strip-types scripts/validate-editor.mjs",
     "test:captions": "node --experimental-strip-types scripts/validate-captions.mjs",
-    "test:server": "node --experimental-strip-types scripts/validate-server.mjs"
+    "test:server": "node --experimental-strip-types scripts/validate-server.mjs",
+    "start": "node --experimental-strip-types server/runtime.ts",
+    "test:product": "node --experimental-strip-types scripts/validate-product.mjs",
+    "test:lifecycle": "node --experimental-strip-types scripts/validate-lifecycle.mjs",
+    "test:caption-review": "node --experimental-strip-types scripts/validate-caption-review.mjs",
+    "test:handoff": "node --experimental-strip-types scripts/validate-handoff.mjs",
+    "test:webm-alpha": "node --experimental-strip-types scripts/validate-webm-alpha.mjs",
+    "test:reproducible": "node scripts/validate-reproducible-install.mjs"
   },
   "dependencies": {
     "@fontsource/abril-fatface": "5.3.0",

@@ -1,5 +1,5 @@
 import type { ComboPreset, LayerAnimation, MotionPreset, TextStylePreset, TypographySettings } from '../types/motion';
-import { isMotionPreset } from '../engine/validation';
+import { isMotionPreset } from '../engine/validation.ts';
 
 const CUSTOM_KEY = 'gb-motion:custom-presets';
 const FAVORITES_KEY = 'gb-motion:favorites';

@@ -10,6 +10,8 @@ import {
 } from '../utils/mediaClient';
 
 type Options = {
+  /** Cambia cuando se reemplaza el proyecto, aunque conserve el mismo video. */
+  sessionKey?: string;
   /** Id del video guardado en el servidor; vacío si todavía no hay uno. */
   mediaId: string;
   /** La frase seleccionada: su look y su movimiento se pueden usar como plantilla. */
@@ -19,8 +21,10 @@ type Options = {
   onApply: (layers: TextLayer[], mode: 'replace' | 'append') => string | null;
 };
 
+export type TranscriptionModel = ReturnType<typeof useTranscription>;
+
 /** Opciones de los subtítulos automáticos y el ciclo de generarlos (extraer, enviar, transcribir, agrupar). */
-export const useTranscription = ({ mediaId, templateLayer, createId, onApply }: Options) => {
+export const useTranscription = ({ mediaId, templateLayer, createId, onApply, sessionKey }: Options) => {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [language, setLanguage] = useState<TranscribeLanguage>('es');
   const [provider, setProvider] = useState<'' | TranscribeProviderId>('');
@@ -37,21 +41,41 @@ export const useTranscription = ({ mediaId, templateLayer, createId, onApply }: 
   const [done, setDone] = useState('');
   const jobId = useRef<string | null>(null);
   const controller = useRef<AbortController | null>(null);
+  const generation = useRef(0);
+  const locked = useRef(false);
+  const mounted = useRef(false);
 
-  useEffect(() => { void fetchProviders().then(setProviders); }, []);
-  useEffect(() => () => controller.current?.abort(), []);
+  const cancelRemote = async (id: string) => {
+    if (!await cancelTranscription(id) && mounted.current) setError('No pude confirmar la cancelación en el servidor. Revisá que GB Motion siga abierto.');
+  };
+  const invalidate = () => {
+    generation.current++;
+    locked.current = false;
+    controller.current?.abort();
+    controller.current = null;
+    if (jobId.current) void cancelRemote(jobId.current);
+    jobId.current = null;
+  };
+
+  useEffect(() => { mounted.current = true; void fetchProviders().then((p) => { if (mounted.current) setProviders(p); }); return () => { mounted.current = false; invalidate(); }; }, []);
+  useEffect(() => { invalidate(); setStage(null); setDone(''); setError(''); }, [mediaId, sessionKey]);
 
   const running = stage !== null;
 
   const generate = async () => {
-    if (running || !mediaId) return;
+    if (locked.current || !mediaId) return;
+    locked.current = true;
+    const token = ++generation.current;
+    const valid = () => mounted.current && token === generation.current;
     setError(''); setDone(''); setStage('extracting');
     const abort = new AbortController();
     controller.current = abort;
     try {
-      const id = await startTranscription({ mediaId, language, provider: provider || undefined });
+      const id = await startTranscription({ mediaId, language, provider: provider || undefined }, abort.signal);
+      if (!valid() || abort.signal.aborted) { await cancelRemote(id); return; }
       jobId.current = id;
-      const words = await pollTranscription(id, setStage, abort.signal);
+      const words = await pollTranscription(id, (s) => { if (valid()) setStage(s); }, abort.signal);
+      if (!valid() || abort.signal.aborted) return;
       const pages = groupWords(words, { maxWords, maxChars, breakOnSilenceMs: onSilence ? 500 : Number.POSITIVE_INFINITY, removeFillers });
       const base = useLook ? templateLayer : createTextLayer('TEXTO', 'plantilla');
       const template: TextLayer = { ...structuredClone(base), wordTiming: { mode: highlight, color, words: [] } };
@@ -60,17 +84,16 @@ export const useTranscription = ({ mediaId, templateLayer, createId, onApply }: 
       if (problem) setError(problem);
       else setDone(`${layers.length} subtítulos creados. Podés deshacerlo con Ctrl+Z.`);
     } catch (failure) {
-      if (!(failure instanceof TranscribeError && failure.code === 'cancelled')) setError(failure instanceof Error ? failure.message : 'No pude generar los subtítulos.');
+      if (valid() && !(failure instanceof TranscribeError && failure.code === 'cancelled')) setError(failure instanceof Error ? failure.message : 'No pude generar los subtítulos.');
+      else if (!valid() && !(failure instanceof TranscribeError && failure.code === 'cancelled')) console.warn('Se perdió la respuesta de la transcripción; no se pudo confirmar la cancelación en el servidor.');
     } finally {
-      setStage(null);
-      jobId.current = null;
-      controller.current = null;
+      if (valid()) { setStage(null); jobId.current = null; controller.current = null; locked.current = false; }
     }
   };
 
   const cancel = () => {
-    controller.current?.abort();
-    if (jobId.current) void cancelTranscription(jobId.current);
+    invalidate();
+    setStage(null);
   };
 
   return {

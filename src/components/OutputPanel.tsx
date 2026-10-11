@@ -1,7 +1,7 @@
 import { Download, Film, Layers, Loader2, Sparkles } from 'lucide-react';
 import type { BackgroundMode, VideoFormat } from '../types/motion';
 
-export type ExportKind = 'mp4' | 'green' | 'alpha' | 'burn';
+export type ExportKind = 'mp4' | 'green' | 'alpha' | 'alpha-webm' | 'burn';
 export type ExportState = { status: 'idle' | 'rendering' | 'done' | 'error'; message?: string; url?: string; progress?: number };
 export type PastExport = { url: string; name: string; at: number };
 
@@ -22,6 +22,13 @@ type Props = {
   onCustomBackground: (color: string) => void;
   onExport: (kind: ExportKind) => void;
   onCancel: () => void;
+  /** Por qué no se puede exportar video ahora (sin servidor, etc.); null si se puede. */
+  renderBlockedReason?: string | null;
+  /** Frases visibles con texto: las que entran en un SRT/VTT. */
+  captionCount: number;
+  /** Mostrar «Transparencia WebM». Se activa cuando el export `alpha-webm` está disponible de punta a punta. */
+  alphaWebm?: boolean;
+  onCaptions: (kind: 'srt' | 'vtt') => void;
 };
 
 const backgrounds: { id: BackgroundMode; label: string; hint?: string; swatch: string }[] = [
@@ -33,9 +40,10 @@ const backgrounds: { id: BackgroundMode; label: string; hint?: string; swatch: s
 
 export const OutputPanel = ({
   formats, formatId, background, customBackground, exportState, pastExports, advanced, hasMedia, audioVolume, onAudioVolume,
-  onFormat, onBackground, onCustomBackground, onExport, onCancel,
+  onFormat, onBackground, onCustomBackground, onExport, onCancel, renderBlockedReason = null, captionCount, onCaptions, alphaWebm = false,
 }: Props) => {
   const rendering = exportState.status === 'rendering';
+  const renderBlocked = rendering || Boolean(renderBlockedReason);
   return (
     <div className="output-panel">
       <div className="panel-block">
@@ -73,7 +81,8 @@ export const OutputPanel = ({
 
       <div className="panel-block">
         <h3>Descargar</h3>
-        <button type="button" className="button primary block" disabled={rendering || !hasMedia} onClick={() => onExport('burn')}>
+        {renderBlockedReason && <p className="hint blocked-reason" role="status">{renderBlockedReason} El proyecto y los subtítulos .srt y .vtt sí se pueden descargar.</p>}
+        <button type="button" className="button primary block" disabled={renderBlocked || !hasMedia} onClick={() => onExport('burn')}>
           <Film size={15} /> Video con tus subtítulos
         </button>
         {hasMedia ? (
@@ -87,17 +96,25 @@ export const OutputPanel = ({
           <p className="hint">Subí un video en «Video» para exportarlo con subtítulos.</p>
         )}
         <p className="hint">Sale listo para publicar: tu video con los subtítulos quemados y el audio original.</p>
-        <button type="button" className="button secondary block" disabled={rendering} onClick={() => onExport('green')}>
+        <button type="button" className="button secondary block" disabled={renderBlocked} onClick={() => onExport('green')}>
           <Download size={15} /> Video con fondo verde
         </button>
         <p className="hint">Para CapCut: se importa y se le quita el verde con chroma.</p>
-        <button type="button" className="button secondary block" disabled={rendering} onClick={() => onExport('mp4')}>
+        <button type="button" className="button secondary block" disabled={renderBlocked} onClick={() => onExport('mp4')}>
           MP4 con el fondo elegido
         </button>
         {advanced && (
-          <button type="button" className="button secondary block" disabled={rendering} onClick={() => onExport('alpha')}>
+          <button type="button" className="button secondary block" disabled={renderBlocked} onClick={() => onExport('alpha')}>
             <Layers size={14} /> Transparencia (beta)
           </button>
+        )}
+        {advanced && alphaWebm && (
+          <>
+            <button type="button" className="button secondary block" disabled={renderBlocked} onClick={() => onExport('alpha-webm')}>
+              <Layers size={14} /> Transparencia WebM
+            </button>
+            <p className="hint">Ideal para editores que aceptan WebM con alfa; si tu editor no lo lee, usá ProRes.</p>
+          </>
         )}
 
         {rendering && (
@@ -117,6 +134,15 @@ export const OutputPanel = ({
         {exportState.status === 'error' && (
           <div className="export-status error" role="status" aria-live="polite">{exportState.message}</div>
         )}
+      </div>
+
+      <div className="panel-block">
+        <h3>Subtítulos como archivo</h3>
+        <div className="control-row">
+          <button type="button" className="button secondary" disabled={captionCount === 0} onClick={() => onCaptions('srt')}>Subtítulos .srt</button>
+          <button type="button" className="button secondary" disabled={captionCount === 0} onClick={() => onCaptions('vtt')}>Subtítulos .vtt</button>
+        </div>
+        <p className="hint">{captionCount === 0 ? 'No hay frases visibles con texto para exportar. Mostrá al menos una.' : 'Para subirlos a YouTube, Instagram o tu editor. Funcionan sin servidor.'}</p>
       </div>
 
       {pastExports.length > 0 && (

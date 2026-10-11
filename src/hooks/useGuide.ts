@@ -41,11 +41,17 @@ export const useGuide = ({ initialMediaId, initialName, flashHint }: Options) =>
   const [guideMediaId, setGuideMediaId] = useState(initialMediaId ?? '');
   const [guideUpload, setGuideUpload] = useState<GuideUpload>({ status: 'idle', progress: 0 });
   const uploadToken = useRef(0);
+  const uploadController = useRef<AbortController | null>(null);
+  const blobs = useRef(new Set<string>());
+  const begin = () => { uploadController.current?.abort(); return ++uploadToken.current; };
 
   const pickGuide = async (file: File) => {
+    const token = begin();
     const src = URL.createObjectURL(file);
+    blobs.current.add(src);
     try {
       const seconds = await readDuration(src);
+      if (uploadToken.current !== token) { revokeBlob(src); blobs.current.delete(src); return; }
       if (!Number.isFinite(seconds) || seconds <= 0) throw new Error('duración desconocida');
       setGuideName(file.name);
       setGuide((current) => {
@@ -54,10 +60,11 @@ export const useGuide = ({ initialMediaId, initialName, flashHint }: Options) =>
       });
       // El video se guarda en el servidor local para que sobreviva a una recarga y
       // para poder exportarlo con los subtítulos adentro.
-      const token = ++uploadToken.current;
+      const abort = new AbortController();
+      uploadController.current = abort;
       setGuideMediaId('');
       setGuideUpload({ status: 'uploading', progress: 0 });
-      uploadMedia(file, (progress) => { if (uploadToken.current === token) setGuideUpload({ status: 'uploading', progress }); })
+      uploadMedia(file, (progress) => { if (uploadToken.current === token) setGuideUpload({ status: 'uploading', progress }); }, abort.signal)
         .then((info) => {
           if (uploadToken.current !== token) return;
           setGuide((current) => current?.src === src ? { ...current, mediaId: info.mediaId } : current);
@@ -71,16 +78,17 @@ export const useGuide = ({ initialMediaId, initialName, flashHint }: Options) =>
           flashHint(error instanceof Error ? error.message : 'No pude guardar el video.');
         });
       flashHint('Video cargado. Preparando la forma de onda…');
-      if (file.size <= 150_000_000) void readWaveform(file).then((waveform) => setGuide((current) => current?.src === src ? { ...current, waveform } : current)).catch(() => flashHint('Video listo. No se pudo leer la forma de onda; podés sincronizar escuchando el audio.'));
+      if (file.size <= 150_000_000) void readWaveform(file).then((waveform) => { if (uploadToken.current === token) setGuide((current) => current?.src === src ? { ...current, waveform } : current); }).catch(() => { if (uploadToken.current === token) flashHint('Video listo. No se pudo leer la forma de onda; podés sincronizar escuchando el audio.'); });
       else flashHint('Video listo. La forma de onda se omite en archivos mayores de 150 MB.');
     } catch {
       URL.revokeObjectURL(src);
-      flashHint('No pude leer ese video. Probá con un MP4.');
+      blobs.current.delete(src);
+      if (uploadToken.current === token) flashHint('No pude leer ese video. Probá con un MP4.');
     }
   };
 
   const removeGuide = () => {
-    uploadToken.current++;
+    begin();
     setGuideName(''); setGuideMediaId(''); setGuideUpload({ status: 'idle', progress: 0 });
     setGuide((current) => {
       if (current) revokeBlob(current.src);
@@ -90,15 +98,23 @@ export const useGuide = ({ initialMediaId, initialName, flashHint }: Options) =>
 
   /** Vuelve a conectar un video ya subido (después de recargar o de abrir un proyecto). */
   const relinkGuide = async (mediaId: string, name: string) => {
-    setGuideMediaId(mediaId);
-    if (!(await mediaExists(mediaId))) { setGuideMediaId((current) => current === mediaId ? '' : current); return; }
+    const token = begin();
+    // La nueva selección invalida también la pareja preview/id anterior.
+    setGuideName(''); setGuideMediaId(''); setGuideUpload({ status: 'idle', progress: 0 });
+    setGuide((current) => { if (current) revokeBlob(current.src); return null; });
+    const exists = await mediaExists(mediaId);
+    if (uploadToken.current !== token) return;
+    if (!exists) { flashHint('No encuentro ese video. Volvé a subirlo en «Video».'); return; }
     const src = mediaUrl(mediaId);
     try {
       const seconds = await readDuration(src);
+      if (uploadToken.current !== token) return;
       if (!Number.isFinite(seconds) || seconds <= 0) throw new Error('duración desconocida');
-      setGuide((current) => current ?? { src, name: name || 'video', durationInFrames: Math.round(seconds * 30), volume: 1, mediaId });
+      setGuideName(name);
+      setGuideMediaId(mediaId);
+      setGuide((current) => { if (current) revokeBlob(current.src); return { src, name: name || 'video', durationInFrames: Math.round(seconds * 30), volume: 1, mediaId }; });
     } catch {
-      setGuideMediaId((current) => current === mediaId ? '' : current);
+      if (uploadToken.current === token) flashHint('No pude leer ese video. Volvé a subirlo en «Video».');
     }
   };
   useEffect(() => { if (initialMediaId) void relinkGuide(initialMediaId, initialName ?? ''); }, []);
@@ -108,7 +124,7 @@ export const useGuide = ({ initialMediaId, initialName, flashHint }: Options) =>
   // sigue usando.
   const guideRef = useRef<VideoGuide | null>(null);
   guideRef.current = guide;
-  useEffect(() => () => { if (guideRef.current) revokeBlob(guideRef.current.src); }, []);
+  useEffect(() => () => { begin(); if (guideRef.current) revokeBlob(guideRef.current.src); for (const src of blobs.current) revokeBlob(src); blobs.current.clear(); }, []);
 
   return { guide, setGuide, guideName, setGuideName, guideMediaId, guideUpload, pickGuide, removeGuide, relinkGuide };
 };

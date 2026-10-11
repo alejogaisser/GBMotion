@@ -115,6 +115,7 @@ export const StyleGallery = ({ styles, typography, text, onApply, onSaveCurrent,
                 className="style-card-frame"
                 style={{ backgroundImage: backdrops[index % backdrops.length] }}
                 aria-pressed={selected}
+                aria-label={preset.name}
                 title={preset.description}
                 onClick={() => onApply(preset.typography)}
               >

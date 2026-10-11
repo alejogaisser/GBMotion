@@ -8,6 +8,7 @@ import { fromElevenLabs, fromGroq } from '../src/captions/providers.ts';
 import { HttpError } from './http.ts';
 import { extractAudio, probe } from './ffmpeg.ts';
 import { isMediaId, mediaPath } from './media.ts';
+import { pruneFinishedJobs } from './jobs.ts';
 
 export type TranscribeOptions = {
   elevenlabsKey?: string;
@@ -27,6 +28,8 @@ type Job = {
   cached?: boolean;
   abort: AbortController;
   createdAt: number;
+  finishedAt?: number;
+  active: boolean;
 };
 
 const PROVIDERS: { id: TranscribeProviderId; label: string; short: string }[] = [
@@ -70,6 +73,8 @@ export const mapProviderError = (provider: TranscribeProviderId, error: unknown)
 
 export const createTranscribeService = (options: TranscribeOptions) => {
   const jobs = new Map<string, Job>();
+  const pending = new Set<Promise<void>>();
+  let closed = false;
   const keyFor = (provider: TranscribeProviderId) => (provider === 'elevenlabs' ? options.elevenlabsKey : options.groqKey);
   const isConfigured = (provider: TranscribeProviderId) => Boolean(keyFor(provider)) || (options.mock && provider === 'elevenlabs');
 
@@ -151,6 +156,7 @@ export const createTranscribeService = (options: TranscribeOptions) => {
       if (aborted()) return;
       if (!job.words || job.words.length === 0) throw new HttpError(422, 'No se detectó voz en el video.');
       if (!job.cached) await writeFile(cache, JSON.stringify(job.words), 'utf8');
+      if (aborted()) return;
       job.status = 'done';
       job.stage = 'done';
     } catch (error) {
@@ -163,11 +169,14 @@ export const createTranscribeService = (options: TranscribeOptions) => {
       console.log(`[transcribe] error ${mediaId} ${provider} ${error instanceof ProviderError ? error.status : (error as { name?: string })?.name ?? 'unknown'}`);
     } finally {
       clearTimeout(stageTimer);
-      if (workDir) void rm(workDir, { recursive: true, force: true });
+      if (workDir) await rm(workDir, { recursive: true, force: true });
+      job.active = false;
+      job.finishedAt = Date.now();
     }
   };
 
   const start = async (body: unknown): Promise<string> => {
+    if (closed) throw new HttpError(503, 'El servidor se está cerrando. Volvé a abrir GB Motion.');
     const input = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
     const provider = chooseProvider(input.provider);
     const language = LANGUAGES.includes(input.language as TranscribeLanguage) ? input.language as TranscribeLanguage : 'es';
@@ -180,11 +189,13 @@ export const createTranscribeService = (options: TranscribeOptions) => {
       throw new HttpError(422, 'No pude leer ese video. Probá con un MP4.');
     }
     // Los trabajos viejos ya terminaron: se limpian para que el mapa no crezca.
-    const limit = Date.now() - 60 * 60 * 1000;
-    for (const [id, job] of jobs) if (job.status !== 'running' && job.createdAt < limit) jobs.delete(id);
+    if (closed) throw new HttpError(503, 'El servidor se está cerrando. Volvé a abrir GB Motion.');
+    pruneFinishedJobs(jobs);
     const jobId = randomUUID();
-    jobs.set(jobId, { status: 'running', stage: 'extracting', abort: new AbortController(), createdAt: Date.now() });
-    void run(jobId, mediaId, provider, language);
+    jobs.set(jobId, { status: 'running', stage: 'extracting', abort: new AbortController(), createdAt: Date.now(), active: true });
+    const task = run(jobId, mediaId, provider, language);
+    pending.add(task);
+    void task.finally(() => pending.delete(task));
     return jobId;
   };
 
@@ -199,5 +210,6 @@ export const createTranscribeService = (options: TranscribeOptions) => {
     if (job && job.status === 'running') { job.status = 'cancelled'; job.abort.abort(); }
   };
 
-  return { listProviders, start, status, cancel };
+  const close = async () => { closed = true; for (const id of jobs.keys()) cancel(id); await Promise.allSettled([...pending]); };
+  return { listProviders, start, status, cancel, close };
 };
