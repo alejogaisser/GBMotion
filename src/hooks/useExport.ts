@@ -5,6 +5,8 @@ import type { BackgroundMode, CompositionProps, VideoFormat } from '../types/mot
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
 type Options = {
+  /** Capacidad de render del servidor; se omite en los consumidores anteriores. */
+  enabled?: boolean;
   /** Props de la composición tal como están en pantalla (con el video de guía). */
   inputProps: CompositionProps;
   background: BackgroundMode;
