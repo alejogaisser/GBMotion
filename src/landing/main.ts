@@ -300,6 +300,26 @@ for (const link of $$('a[data-focus-frase]')) {
 wireRadioGroup(chipsEl, (chip) => { if (chip.dataset.template) setTemplate(chip.dataset.template); wakeHero(); });
 wireRadioGroup(fondosEl, (chip) => { if (chip.dataset.bg) setBackground(chip.dataset.bg); wakeHero(); });
 
+/* «Abrir en el editor»: arma /editor/#demo=… (la frase viaja sólo en el fragmento).
+   handoff.ts arrastra el registro de fuentes y presets, así que se importa recién en el clic.
+   Sin JS (o si algo falla) el enlace sigue siendo /editor/. */
+const handoffLink = $<HTMLAnchorElement>('#handoff');
+handoffLink?.addEventListener('click', (event) => {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  const fallback = handoffLink.getAttribute('href') || '/editor/';
+  const templateId = chipsEl?.querySelector<HTMLElement>('[aria-checked="true"]')?.dataset.template ?? 'amarillo-impacto';
+  const raw = input?.value ?? '';
+  import('../utils/handoff')
+    .then(({ cleanPhrase, encodeHandoff, payloadFromTemplateId }) => {
+      const phrase = cleanPhrase(raw).slice(0, 80).trim();
+      const encoded = encodeHandoff({ style: payloadFromTemplateId(templateId), ...(phrase ? { phrase } : {}) });
+      return `/editor/#demo=${encoded}`;
+    })
+    .catch(() => fallback)
+    .then((url) => { window.location.assign(url); });
+});
+
 /* Tarjetas de «Estilos»: eligen la plantilla en el hero y vuelven a él. */
 for (const card of $$<HTMLButtonElement>('.card[data-template]')) {
   card.addEventListener('click', () => {
