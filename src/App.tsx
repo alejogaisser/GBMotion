@@ -707,6 +707,7 @@ export default function App() {
         onSplit={() => project.splitLayer(currentFrame)}
         waveform={guide?.waveform}
         guideDuration={guide?.durationInFrames}
+        guideName={guideName || undefined}
         canAdd={layers.length < MAX_LAYERS}
         onSeek={(frame) => { seekTargetFrame.current = frame; playerRef.current?.pause(); playerRef.current?.seekTo(frame); setCurrentFrame(frame); }}
         onSelect={selectLayer}

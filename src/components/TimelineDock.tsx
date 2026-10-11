@@ -2,6 +2,7 @@ import { Copy, Eye, EyeOff, Lock, LockOpen, Plus, Trash2, Wand2 } from 'lucide-r
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { TextLayer } from '../types/motion';
 import { getLayerDuration, isAutoDuration } from '../utils/duration';
+import { formatClock } from './timecode';
 import { animationForLayer, getSegmentTimelineDuration } from '../engine/layerAnimation';
 
 type Props = {
@@ -14,6 +15,7 @@ type Props = {
   onSplit: () => void;
   waveform?: number[];
   guideDuration?: number;
+  guideName?: string;
   onSeek: (frame: number) => void;
   onSelect: (id: string, multiple?: boolean) => void;
   onChange: (id: string, patch: Partial<TextLayer>) => void;
@@ -23,11 +25,6 @@ type Props = {
   onDelete: (id: string) => void;
   onToggleVisible: (id: string) => void;
   onToggleLock: (id: string) => void;
-};
-
-const clock = (frame: number) => {
-  const seconds = Math.max(0, frame) / 30;
-  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 };
 
 export const TimelineDock = ({
@@ -152,7 +149,7 @@ export const TimelineDock = ({
         style={{ left: `${left}%`, width: `${Math.min(100 - left, Math.max(0.1, clipDuration / span * 100))}%` }}
         onPointerDown={(event) => begin(event, layer, 'move')}
         onClick={() => onSelect(layer.id)}
-        aria-label={`${layer.name}: empieza en ${clock(start)}, dura ${(clipDuration / 30).toFixed(1)} segundos${isAutoDuration(layer) ? ' (automático)' : ''}`}
+        aria-label={`${layer.name}: empieza en ${formatClock(start)}, dura ${(clipDuration / 30).toFixed(1)} segundos${isAutoDuration(layer) ? ' (automático)' : ''}`}
       >
         {inShare > 0 && (
           <b className="clip-fx in" style={{ width: `${inShare * 100}%` }} title={`Entrada: ${(getSegmentTimelineDuration(animation.in, layer.text) / 30).toFixed(1)} s`}>
@@ -181,8 +178,8 @@ export const TimelineDock = ({
     <section className="dock" aria-label="Cuándo aparece cada frase">
       <div className="dock-head">
         <span className="dock-title">Tus frases</span>
-        <output className="dock-clock">{clock(currentFrame)}<i>:{String(Math.floor(currentFrame % 30)).padStart(2, '0')}</i></output>
-        <span className="dock-total">de {clock(duration)}</span>
+        <output className="dock-clock">{formatClock(currentFrame)}<i>:{String(Math.floor(currentFrame % 30)).padStart(2, '0')}</i></output>
+        <span className="dock-total">de {formatClock(duration)}</span>
         <div className="dock-head-actions">
           <div className="segmented tiny" role="group" aria-label="Cómo se muestran las frases">
             <button type="button" className={compact ? 'on' : ''} aria-pressed={compact} onClick={() => setLaneChoice('lane')}>Subtítulos</button>
@@ -204,7 +201,7 @@ export const TimelineDock = ({
 
       <div className="timeline-scroll" ref={scrollRef} onScroll={readView}><div className="timeline-content" style={{ width: `${zoom * 100}%` }}>
       <div className="dock-ruler" aria-hidden="true">
-        {ticks.map((frame) => <span key={frame} style={{ left: `${frame / span * 100}%` }}>{clock(frame)}</span>)}
+        {ticks.map((frame) => <span key={frame} style={{ left: `${frame / span * 100}%` }}>{formatClock(frame)}</span>)}
       </div>
 
       {waveform && waveform.length > 0 && <div className="waveform" aria-label="Forma de onda del audio de referencia">

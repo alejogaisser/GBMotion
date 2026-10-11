@@ -11,11 +11,12 @@
   width: 100%;
   height: 32px;
   padding: 0 9px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--surface-2);
-  font-size: 12.5px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--negro);
+  font-size: 14px;
 }
+.field select:focus, .field input[type='text']:focus, .modal input:focus { border-color: var(--lima); }
 
 .time-field {
   display: grid;
@@ -26,7 +27,8 @@
 }
 .time-field > span { font-size: 12px; color: var(--text-2); }
 .time-field output {
-  font-size: 11.5px; font-weight: 600;
+  font-family: var(--f-mono);
+  font-size: 12px; font-weight: 700;
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
@@ -36,7 +38,7 @@ input[type='range'] {
   width: 100%;
   height: 3px;
   margin: 6px 0 0;
-  accent-color: var(--accent);
+  accent-color: var(--lima);
 }
 
 .range-control { display: block; margin-top: 11px; }
@@ -49,10 +51,10 @@ input[type='range'] {
   width: 54px;
   height: 25px;
   padding: 0 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface-2);
-  font-size: 11.5px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--negro);
+  font-size: 12px;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -64,39 +66,51 @@ input[type='range'] {
   display: flex;
   gap: 2px;
   padding: 2px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--negro);
 }
 .segmented.vertical { flex-direction: column; }
 .segmented button {
   flex: 1;
   display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-  min-height: 26px;
+  min-height: 28px;
   padding: 0 9px;
-  border: 0; border-radius: 6px;
+  border: 0; border-radius: var(--radius);
   background: transparent;
-  color: var(--text-3);
-  font-size: 11.5px; font-weight: 600;
+  color: var(--text-2);
+  font-size: 12px; font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
-  transition: background .15s, color .15s;
 }
-.segmented button:hover:not(:disabled) { color: var(--text-2); }
-.segmented button.on { background: var(--surface-3); color: var(--text); }
+.segmented button:hover:not(:disabled) { color: var(--text); }
+.segmented button.on { background: var(--hueso); color: var(--on-accent); }
 .segmented button:disabled { opacity: .35; cursor: not-allowed; }
 
 .caption-input {
   width: 100%;
   padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface-2);
-  font-size: 13.5px; font-weight: 500;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--negro);
+  font-size: 14px; font-weight: 400;
   line-height: 1.45;
   resize: vertical;
 }
-.caption-input:focus { outline: none; border-color: var(--accent-line); }
+.caption-input:focus { border-color: var(--lima); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px; }
+.chips button {
+  padding: 5px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px; font-weight: 700;
+  cursor: pointer;
+}
+.chips button:hover { color: var(--text); }
+.chips button.on { color: var(--on-accent); background: var(--hueso); border-color: var(--hueso); }
 
 /* ================================ COLOR =================================== */
 
@@ -183,22 +197,23 @@ input[type='range'] {
 /* El ajuste fino arranca cerrado: la galería sigue siendo el camino principal. */
 .tuner {
   margin-top: 16px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
   background: var(--surface-2);
   overflow: hidden;
 }
 .tuner > summary {
   padding: 11px 13px;
-  font-size: 12px; font-weight: 600;
+  font-family: var(--f-mono);
+  font-size: 12px; font-weight: 700;
   color: var(--text-2);
   cursor: pointer;
   list-style: none;
   display: flex; align-items: center; justify-content: space-between;
 }
 .tuner > summary::-webkit-details-marker { display: none; }
-.tuner > summary::after { content: '+'; color: var(--text-3); font-size: 15px; line-height: 1; }
-.tuner[open] > summary { border-bottom: 1px solid var(--line); color: var(--text); }
+.tuner > summary::after { content: '+'; color: var(--lima); font-size: 15px; line-height: 1; }
+.tuner[open] > summary { border-bottom: 1px solid var(--line-2); color: var(--text); }
 .tuner[open] > summary::after { content: '−'; }
 .tuner > summary:hover { color: var(--text); }
 
@@ -300,3 +315,110 @@ input[type='range'] {
 }
 .guide-file button:hover { color: var(--danger); background: var(--surface-3); }
 
+
+
+/* ===== Explorador de fuentes (movido desde canvas.css) ===== */
+/* ============================ EXPLORADOR DE FUENTES ======================= */
+
+.font-browser { position: relative; margin-bottom: 4px; }
+.field-label { display: block; margin-bottom: 5px; font-size: 11.5px; color: var(--text-2); }
+
+.font-browser-trigger {
+  width: 100%;
+  display: flex; align-items: center; gap: 8px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  cursor: pointer;
+  text-align: left;
+}
+.font-browser-trigger:hover { border-color: var(--line-2); }
+.font-browser-trigger > span { flex: 1; min-width: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.font-browser-trigger small { font-size: 10px; color: var(--text-3); }
+
+.font-browser-panel {
+  position: absolute; left: 0; right: 0; top: calc(100% + 5px);
+  z-index: 30;
+  display: grid;
+  gap: 8px;
+  max-height: 360px;
+  padding: 11px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: 0 22px 50px -20px rgba(0, 0, 0, .95);
+}
+.font-browser-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 9px; }
+.font-browser-heading strong { display: block; font-size: 12.5px; }
+.font-browser-heading small { font-size: 10.5px; color: var(--text-3); }
+.font-browser-heading button { border: 0; background: none; color: var(--text-3); cursor: pointer; padding: 0; }
+.font-browser-heading button:hover { color: var(--text); }
+
+.font-search {
+  display: flex; align-items: center; gap: 7px;
+  height: 30px; padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text-3);
+}
+.font-search input { flex: 1; min-width: 0; border: 0; background: none; outline: none; font-size: 12px; color: var(--text); }
+
+.font-filters { display: flex; flex-wrap: wrap; gap: 4px; }
+.font-filters button {
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+.font-filters button.active { background: var(--surface-3); color: var(--text); border-color: var(--line-2); }
+
+.font-list { overflow-y: auto; display: grid; gap: 3px; }
+.font-option { display: flex; align-items: center; gap: 5px; border-radius: 7px; }
+.font-option:hover { background: var(--surface-3); }
+.font-option.selected { background: var(--accent-soft); }
+.font-option-main {
+  flex: 1; min-width: 0;
+  display: grid; gap: 1px;
+  padding: 7px 9px;
+  border: 0; background: none;
+  cursor: pointer; text-align: left;
+}
+.font-option-name { font-size: 10px; color: var(--text-3); }
+.font-option-main strong { font-size: 15px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.font-option-main small { font-size: 9.5px; color: var(--text-3); }
+.font-favorite { width: 28px; border: 0; background: none; color: var(--text-3); cursor: pointer; }
+.font-favorite.active { color: #FFC53D; }
+.font-empty { font-size: 12px; color: var(--text-3); padding: 12px 0; text-align: center; }
+
+
+
+/* ===== Campos y ajustes (antes «Editor refinements») ===== */
+.field > span, .field-label, .time-field > span, .range-control > span { font-size: 13px; }
+.chips button, .font-filters button { font-size: 12px; padding: 5px 9px; }
+.font-option-main strong { font-size: 19px; white-space: normal; }
+.font-option-name, .font-option-main small { font-size: 12px; }
+.loop-chip { font-size: 12px; min-height: 38px; }
+.tuner.caption-tools, .tuner.template-picker { margin: 0 0 14px; }
+.caption-tools textarea { width: 100%; padding: 9px; background: var(--bg); border: 1px solid var(--line-2); border-radius: 7px; resize: vertical; font: inherit; }
+.caption-tools .control-row { flex-wrap: wrap; margin-top: 12px; }
+.inline-error { color: var(--danger); font-size: 13px; margin: 8px 0; }
+.template-list { display: grid; gap: 8px; }
+.appearance-actions { display: flex; gap: 5px; margin-top: 9px; flex-wrap: wrap; }
+fieldset.tuner-block { border: 0; margin: 0; min-width: 0; }
+.word-timing-table { display: grid; gap: 5px; margin: 12px 0; max-height: 280px; overflow: auto; }
+.word-timing-table > div { display: grid; grid-template-columns: minmax(50px, 1fr) 65px auto; gap: 5px; padding: 5px; border-radius: 5px; }
+.word-timing-table > div.active { background: var(--accent-soft); }
+.word-timing-table input { min-width: 0; width: 100%; background: var(--bg); border: 1px solid var(--line-2); border-radius: 5px; }
+.word-timing-table .linklike { overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.key-list { display: flex; gap: 5px; margin-top: 12px; flex-wrap: wrap; }
+.easing-preview { height: 45px; width: 100%; margin: 10px 0; }
+.easing-preview path { fill: none; stroke: var(--accent); stroke-width: 2; }
+.selection-tools { font-size: 12px; padding-top: 9px; }
+.layer-select { width: 14px; height: 14px; accent-color: var(--accent); flex: 0 0 auto; }
+@media(max-width: 680px) { .clip-times > span { display: none; } }

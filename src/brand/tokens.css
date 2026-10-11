@@ -1,0 +1,9 @@
+/* GB Motion · marca «Sala de edición». Sólo custom properties: lo importan la landing y el editor. */
+:root {
+  --negro: #0E0E0C; --hueso: #F2EFE6; --lima: #D6FF4B; --resaltado: #FFE94A; --rec: #FF3B2F;
+  --verde: #00FF00; --panel: #1A1A17;
+  --f-titulo: 'Anton', 'Arial Narrow', Impact, sans-serif;
+  --f-serif: 'Instrument Serif', Georgia, serif;
+  --f-texto: 'Archivo', system-ui, Arial, sans-serif;
+  --f-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+}

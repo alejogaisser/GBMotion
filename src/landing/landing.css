@@ -1,3 +1,4 @@
+@import '../brand/tokens.css';
 /* ==========================================================================
    GB Motion · landing «Sala de edición».
    Tokens y layout propios de la landing: nada de acá se comparte con el editor.
@@ -5,22 +6,10 @@
    ========================================================================== */
 
 :root {
-  --negro: #0E0E0C;
-  --hueso: #F2EFE6;
-  --lima: #D6FF4B;
-  --resaltado: #FFE94A;
-  --rec: #FF3B2F;
-  --panel: #1A1A17;
   --linea-n: rgba(242, 239, 230, .22);
   --linea-h: rgba(14, 14, 12, .85);
   --suave-n: #BDBAAE;
   --suave-h: #4A4943;
-  --verde: #00FF00;
-
-  --f-titulo: 'Anton', 'Arial Narrow', Impact, sans-serif;
-  --f-serif: 'Instrument Serif', Georgia, serif;
-  --f-texto: 'Archivo', system-ui, Arial, sans-serif;
-  --f-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
 
   --nav-h: 70px;
   --pad: clamp(16px, 4vw, 48px);
