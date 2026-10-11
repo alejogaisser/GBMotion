@@ -24,7 +24,7 @@ const { isAbsolute } = await import('node:path');
 
   const big = Readable.from([Buffer.alloc(600), Buffer.alloc(600)]);
   await assert.rejects(readBody(big, 1000), (error) => error instanceof HttpError && error.status === 413);
-  assert.equal(big.destroyed, true, 'the request is destroyed after the limit');
+  // El socket lo cierra json(413) después de finish; readBody sólo deja de acumular.
   await assert.rejects(readJson(Readable.from([Buffer.from('{roto')])), (error) => error.status === 400);
 }
 

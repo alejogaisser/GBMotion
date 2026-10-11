@@ -27,16 +27,23 @@ Atajos y ayudas de la pantalla:
 
 ## Ejecutar
 
-En Windows, también podés hacer doble clic en `INICIAR_GB_MOTION.cmd`. El acceso inicia el servidor local en segundo plano y abre la aplicación en el navegador.
+En Windows, también podés hacer doble clic en `INICIAR_GB_MOTION.cmd`. El acceso usa el mismo runtime de producción que `npm start`, en segundo plano, y abre `/editor/`. Primero necesitás generar el build; si falta, el launcher indica cómo hacerlo y no instala dependencias.
 
 Desde una terminal:
 
 ```bash
 pnpm install
-pnpm dev
+pnpm build
+npm start
 ```
 
-Abrir `http://127.0.0.1:4173`.
+Abrir `http://127.0.0.1:4173/editor/`. `/` es la landing, `/editor/` el editor y una ruta desconocida devuelve la página 404. El runtime escucha sólo en `127.0.0.1`; no está preparado para exponerlo a internet. Para desarrollar usá `pnpm dev` y la misma ruta del editor.
+
+`GB_PORT` cambia el puerto local (1–65535, predeterminado 4173). La API `GET /api/health` indica el modo local y las capacidades de subida, render y transcripción, sin publicar claves ni carpetas. Con `GB_TRANSCRIBE_MOCK=1`, la transcripción usa el fixture; con un proveedor configurado usa su servicio; sin clave queda deshabilitada.
+
+Si abrís el build en un hosting estático, el editor funciona en modo navegador: preview, proyectos JSON y subtítulos SRT/VTT siguen disponibles. Subir un video al servidor, generar subtítulos con IA y exportar video requieren el runtime local. La interfaz permite reintentar la conexión.
+
+El primer export tarda más porque Remotion prepara su bundle. Durante un export, el editor conserva las capacidades verificadas y no consulta health; podés reintentar al terminar. La latencia depende del equipo y no tiene un plazo garantizado.
 
 ## Flujo rápido
 
@@ -170,7 +177,11 @@ Se guardan en `localStorage`, por lo que no requieren cuenta, red ni base de dat
 - `pnpm build`: verificación TypeScript y build de producción de la interfaz.
 - `pnpm remotion:studio`: abre la composición directamente en Remotion Studio.
 - `pnpm render:demo`: render de humo usando las props de demo.
-- `pnpm test`: todos los validadores (fuentes, motor, editor, subtítulos y servidor).
+- `pnpm test`: los cinco validadores originales (fuentes, motor, editor, subtítulos y servidor).
+- `pnpm test:product`, `pnpm test:lifecycle`, `pnpm test:caption-review`: validación del handler, cancelaciones y heurísticas de legibilidad. Lifecycle usa un servidor HTTP temporal con respuestas demoradas, sin llamar a una IA ni renderizar videos.
+- `pnpm test:handoff`: validación de plantillas y enlaces de estilo.
+- `pnpm test:webm-alpha`: spike de render real VP9 con prueba de píxeles RGBA; requiere un turno de render y un navegador disponible.
+- `pnpm test:reproducible`: instalación y build en checkout/store aislados; es una prueba separada y no corre con `pnpm test`.
 
 ## Arquitectura
 
@@ -179,7 +190,7 @@ Se guardan en `localStorage`, por lo que no requieren cuenta, red ni base de dat
 - `src/presets`: configuraciones de presets; no contienen renderers duplicados.
 - `src/remotion`: composición multicapa compartida por Player, Studio y Renderer.
 - `src/types`: contrato tipado de animación, texto y formato.
-- `server`: servidor local dentro de Vite (subida y servicio de videos, render, transcripción, ffmpeg).
+- `server`: handler compartido por Vite y el runtime Node de producción (subida y servicio de videos, render, transcripción, ffmpeg).
 - `src/hooks`: el estado de la app dividido en ganchos (`useProject`, `useGuide`, `useExport`, `useTranscription`).
 - `src/styles`: la hoja de estilos dividida en `tokens`, `layout`, `panels`, `controls`, `timeline`, `canvas` y `modal`; `src/styles.css` sólo los importa en ese orden.
 - `src/captions`: lógica pura de subtítulos automáticos (agrupar palabras, pasarlas a frases, leer las respuestas de la IA).
@@ -207,6 +218,7 @@ En **Exportar** hay dos caminos:
 - **Video con fondo verde**: sólo los subtítulos sobre `#00ff00` y sin audio, para quitar el verde con chroma en CapCut. Sale como `gb-motion-green-<fecha>.mp4`.
 - **MP4 con el fondo elegido**: H.264 con el fondo que hayas puesto.
 - **Transparencia (beta)**, sólo en ajustes finos: ProRes 4444 `.mov` con canal alpha real. Los archivos son grandes; usalo sólo si tu editor importa ProRes con alpha.
+- **Transparencia WebM**: VP9 `.webm` con alfa comprobada en píxeles RGBA del render de prueba. Necesita un editor que importe WebM con alfa; usá ProRes si tu editor no lo admite.
 
 Los videos se descargan desde el navegador y también quedan en `exports/`. Se renderiza un video a la vez: si pedís otro mientras hay uno en proceso, GB Motion avisa («Ya hay un video en proceso»).
 
@@ -214,7 +226,11 @@ El render corre como un trabajo: `POST /api/render` devuelve un `jobId` y la int
 
 La API local sólo acepta pedidos de la propia app (`Origin` ausente o `http://127.0.0.1:4173` / `http://localhost:4173`); cualquier otra web recibe 403. Los tamaños aceptados son los tres de la app (1080×1920, 1920×1080, 1080×1080).
 
-El servidor es el de desarrollo (`pnpm dev`). Si Vite se reinicia durante un render o una transcripción —por ejemplo al editar `vite.config.ts` o `.env.local`— ese trabajo se pierde y la interfaz muestra un error controlado.
+El servidor de producción se inicia con `npm start`; Vite (`pnpm dev`) queda para desarrollo. Al cerrar cualquiera de los dos, los trabajos activos se cancelan. Si se reinicia durante un render o una transcripción, volvé a intentar desde el editor.
+
+Sólo se listan y sirven exports terminados y no vacíos: durante el render se escribe un archivo parcial y se publica por rename tras éxito. Cancelar limpia el parcial; el lugar de render sigue reservado hasta terminar esa limpieza. Los trabajos terminados se conservan hasta una hora, con un máximo de veinte por servicio.
+
+La revisión de legibilidad muestra avisos heurísticos (velocidad, duración, texto vacío, palabras fuera del clip y subtítulos superpuestos en tiempo). No cambia el proyecto ni bloquea un export: vos decidís qué corregir. Los umbrales predeterminados son 20 caracteres por segundo y 0,5 segundos de duración mínima.
 
 ## Configuración de la IA (`.env.local`)
 
