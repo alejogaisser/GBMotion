@@ -203,9 +203,12 @@ const syncTicker = () => {
   window.clearInterval(tickerTimer);
   tickerTimer = 0;
   if (!look) return;
+  // Con la isla activa la vista estática queda oculta: no hace falta animarla.
+  if (frame?.dataset.islandState === 'ready') { look.removeAttribute('data-live'); return; }
   if (canMove()) {
     look.setAttribute('data-live', '');
     tickerTimer = window.setInterval(() => {
+      if (frame?.dataset.islandState === 'ready') { syncTicker(); return; }
       // Una vuelta de palabras y dos pasos de pausa antes de repetir.
       activeIndex = activeIndex >= words.length + 1 ? 0 : activeIndex + 1;
       paintTicker();
