@@ -28,11 +28,11 @@ const signature = (t: TypographySettings) => JSON.stringify([
 
 /** Fondos que imitan un cuadro de video, para juzgar el contraste real. */
 const backdrops = [
-  'linear-gradient(155deg,#2c3a56,#10141c 58%,#2a1620)',
+  'linear-gradient(155deg,#3a372f,#141412 58%,#2a2420)',
   'linear-gradient(155deg,#3d2a1c,#150f0b 60%,#2d2418)',
-  'linear-gradient(155deg,#16332b,#0a1512 60%,#0f2a3a)',
-  'linear-gradient(155deg,#2c1c3d,#120c1a 60%,#3a1526)',
-  'linear-gradient(155deg,#0f1a2e,#080b12 65%,#131c2b)',
+  'linear-gradient(155deg,#2b3326,#10130e 60%,#262a1f)',
+  'linear-gradient(155deg,#3a2422,#140d0c 60%,#2e1d1a)',
+  'linear-gradient(155deg,#33302a,#0f0f0d 65%,#24221d)',
   'linear-gradient(155deg,#33241a,#141010 60%,#2b1519)',
 ];
 
@@ -113,6 +113,7 @@ export const StyleGallery = ({ styles, typography, text, onApply, onSaveCurrent,
               <button
                 type="button"
                 className="style-card-frame"
+                data-font-preview
                 style={{ backgroundImage: backdrops[index % backdrops.length] }}
                 aria-pressed={selected}
                 aria-label={preset.name}

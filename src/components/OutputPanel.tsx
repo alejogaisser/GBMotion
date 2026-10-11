@@ -35,7 +35,7 @@ const backgrounds: { id: BackgroundMode; label: string; hint?: string; swatch: s
   { id: 'green', label: 'Verde', hint: 'Para CapCut', swatch: '#00ff00' },
   { id: 'black', label: 'Negro', swatch: '#050505' },
   { id: 'white', label: 'Blanco', swatch: '#ffffff' },
-  { id: 'checker', label: 'Cuadros', hint: 'Solo para ver', swatch: 'repeating-conic-gradient(#3a3f4a 0% 25%, #23262d 0% 50%) 50% / 12px 12px' },
+  { id: 'checker', label: 'Cuadros', hint: 'Solo para ver', swatch: 'repeating-conic-gradient(#4A4943 0% 25%, #2A2A26 0% 50%) 50% / 12px 12px' },
 ];
 
 export const OutputPanel = ({

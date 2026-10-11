@@ -1,128 +1,184 @@
 /* ============================ LÍNEA DE TIEMPO ============================= */
+/* Pistas T (frases), V1 (video de guía) y A1 (audio) con un solo cabezal lima.
+   Regla sticky arriba, V1/A1 sticky abajo y encabezados sticky a la izquierda. */
 
 .dock {
-  border-top: 1px solid var(--line);
-  background: var(--surface);
-  padding: 9px 14px 12px;
   display: grid;
-  gap: 7px;
-  max-height: 216px;
-  min-height: 118px;
+  grid-template-rows: 40px minmax(0, 1fr) auto;
+  height: var(--timeline-height);
+  padding: 0;
+  border-top: 1px solid var(--line-2);
+  background: var(--surface);
+  overflow: hidden;
 }
 
-.dock-head { display: flex; align-items: baseline; gap: 10px; }
-.dock-title { font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
-.dock-clock { font-size: 13px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
-.dock-clock i { font-style: normal; color: var(--text-3); font-weight: 500; }
-.dock-total { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
-.dock-head-actions { margin-left: auto; display: flex; gap: 6px; }
+.dock-head {
+  display: flex; align-items: center; gap: 10px;
+  height: 40px; padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+}
+.dock-title { font-family: var(--f-mono); font-size: 12px; font-weight: 700; color: var(--text-2); white-space: nowrap; }
+.dock-head > .lane-count { margin: 0; }
+.dock-head-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.dock-head-actions .ghost-button { white-space: nowrap; gap: 5px; }
+.dock-head-actions .ghost-button svg { flex: 0 0 auto; }
+.dock-head-actions .ghost-button[aria-pressed='true'] { color: var(--lima); border-color: var(--accent-line); }
+.timeline-zoom { display: inline-flex; align-items: center; gap: 6px; font-family: var(--f-mono); font-size: 12px; color: var(--text-2); }
+.timeline-zoom select { height: 26px; padding: 0 4px; }
+.segmented.tiny button { min-height: 22px; padding: 0 9px; font-size: 12px; }
 
+/* El scroll horizontal y vertical viven acá adentro. */
+.timeline-scroll { min-height: 0; overflow: auto; scrollbar-gutter: stable; background: var(--bg); }
+.timeline-content { position: relative; min-width: 640px; }
+
+/* ---- Regla (sticky arriba) ---- */
+.dock-ruler-row {
+  position: sticky; top: 0; z-index: 7;
+  display: grid;
+  grid-template-columns: var(--timeline-label) minmax(0, 1fr);
+  height: 22px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line-2);
+  overflow: clip;
+}
+.dock-corner { position: sticky; left: 0; z-index: 10; background: var(--surface); border-right: 1px solid var(--line-2); }
 .dock-ruler {
-  position: relative;
-  height: 12px;
-  margin-left: 174px;
+  position: relative; height: 100%;
+  background-image: repeating-linear-gradient(90deg, var(--line-2) 0 1px, transparent 1px 12px);
+  background-position: left bottom;
+  background-size: 100% 6px;
+  background-repeat: no-repeat;
 }
+.dock-ruler span:first-child { transform: none; padding-left: 6px; }
 .dock-ruler span {
-  position: absolute; top: 0;
+  position: absolute; top: 2px;
+  padding: 0 3px;
   transform: translateX(-50%);
-  font-size: 9px; color: var(--text-3);
+  background: var(--surface);
+  font-family: var(--f-mono); font-size: 11px; line-height: 14px; color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
-
-.dock-tracks { min-height: 0; display: grid; gap: 5px; }
-
-.dock-scrubber { margin: 0 0 2px 174px; width: calc(100% - 174px); }
-
-.dock-rows {
-  position: relative;
-  min-height: 0;
-  overflow-y: auto;
-  display: grid;
-  gap: 3px;
-  padding-right: 2px;
-}
-
-.dock-playhead {
-  position: absolute;
-  top: 0; bottom: 0;
-  left: 0;
-  width: 1px;
-  margin-left: 174px;
-  background: var(--danger);
+/* Bandera del cabezal, dentro de la regla sticky para que no se pierda al scrollear. */
+.dock-ruler-row::after {
+  content: '';
+  position: absolute; top: 0; z-index: 9;
+  left: calc(var(--timeline-label) + (100% - var(--timeline-label)) * var(--p, 0));
+  width: 10px; height: 12px;
+  transform: translateX(-50%);
+  background: var(--lima);
+  clip-path: polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%);
   pointer-events: none;
-  z-index: 2;
 }
+/* El scrubber cubre la regla: el centro de su pulgar cae sobre el mismo `span` que los clips. */
+input.dock-scrubber {
+  appearance: none;
+  position: absolute; top: 0; z-index: 8;
+  left: calc(var(--timeline-label) - 8px);
+  width: calc(100% - var(--timeline-label) + 16px);
+  height: 22px; margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.dock-scrubber::-webkit-slider-runnable-track { height: 22px; background: transparent; }
+.dock-scrubber::-webkit-slider-thumb { appearance: none; width: 16px; height: 22px; border: 0; background: transparent; margin-top: 0; }
+.dock-scrubber::-moz-range-track { height: 22px; background: transparent; }
+.dock-scrubber::-moz-range-thumb { width: 16px; height: 22px; border: 0; border-radius: 0; background: transparent; }
+.dock-scrubber:focus-visible { outline-offset: -2px; }
 
+/* ---- Filas y encabezados ---- */
+.dock-rows { position: relative; display: block; }
 .dock-row {
   display: grid;
-  grid-template-columns: 170px minmax(0, 1fr);
-  gap: 4px;
-  align-items: center;
-  border-radius: 7px;
+  grid-template-columns: var(--timeline-label) minmax(0, 1fr);
+  align-items: stretch;
+  border-bottom: 1px solid var(--line);
 }
-.dock-row.active { background: var(--surface-2); }
+.dock-row.multi-selected { background: var(--accent-soft); }
 
-.dock-row-head { display: flex; align-items: center; gap: 2px; min-width: 0; padding-left: 3px; }
+.dock-row-head {
+  position: sticky; left: 0; z-index: 9;
+  display: flex; align-items: center; gap: 4px;
+  min-width: 0; height: 34px; padding: 0 4px 0 4px;
+  background: var(--surface);
+  border-right: 1px solid var(--line-2);
+  border-left: 2px solid transparent;
+}
+.dock-row.active .dock-row-head { background: var(--surface-2); border-left-color: var(--lima); }
 .dock-row-name {
   flex: 1; min-width: 0;
   display: flex; align-items: center; gap: 6px;
   padding: 4px 2px;
   border: 0; background: none;
   color: var(--text-2);
-  font-size: 11.5px;
+  font-size: 12px; font-weight: 400;
   text-align: left;
   cursor: pointer;
 }
-.dock-row-name b {
-  width: 16px; height: 16px; flex: 0 0 auto;
-  display: grid; place-items: center;
-  border-radius: 4px;
-  background: var(--surface-3);
-  color: var(--text-3);
-  font-size: 9px;
-}
-.dock-row-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dock-row-name span, .track-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track-name { font-size: 12px; color: var(--text-2); }
 .dock-row.active .dock-row-name { color: var(--text); }
-.dock-row.active .dock-row-name b { background: var(--accent); color: #08101F; }
 
-.dock-row-actions { display: flex; gap: 1px; opacity: 0; transition: opacity .15s; }
+.track-code {
+  flex: 0 0 auto; min-width: 22px; height: 18px; padding: 0 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--radius);
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-family: var(--f-mono); font-size: 11px; font-weight: 700; font-style: normal;
+}
+/* El prefijo «T» es sólo visual: no entra en el nombre accesible. */
+.dock-row-name .track-code::before,
+.lane-row .track-code::before { content: 'T' / ''; }
+.dock-row.active .track-code { background: var(--lima); color: var(--on-accent); }
+
+.dock-row-actions { display: flex; gap: 1px; opacity: 0; }
 .dock-row:hover .dock-row-actions, .dock-row.active .dock-row-actions, .dock-row:focus-within .dock-row-actions { opacity: 1; }
 .dock-row-actions button {
-  width: 22px; height: 22px;
+  width: 24px; height: 26px;
   display: grid; place-items: center;
-  border: 0; border-radius: 5px;
+  border: 0; border-radius: var(--radius);
   background: transparent;
-  color: var(--text-3);
+  color: var(--text-2);
   cursor: pointer;
 }
 .dock-row-actions button:hover:not(:disabled) { color: var(--text); background: var(--surface-3); }
-.dock-row-actions button:disabled { opacity: .3; cursor: not-allowed; }
+.dock-row-actions button:disabled { opacity: .35; cursor: not-allowed; }
 
-.dock-lane { position: relative; height: 26px; border-radius: 6px; background: var(--surface-2); overflow: hidden; }
-.dock-row.active .dock-lane { background: var(--bg); }
+/* ---- Carriles y clips ---- */
+.dock-lane { position: relative; height: 34px; background: var(--bg); overflow: hidden; }
+.dock-row.active .dock-lane { background: var(--surface); }
 
 .dock-clip {
   position: absolute; top: 3px; bottom: 3px;
   display: flex; align-items: center; gap: 5px;
-  padding: 0 9px 0 8px;
-  border: 0; border-radius: 5px;
-  background: var(--accent);
-  color: #061027;
-  font-size: 10.5px; font-weight: 650;
+  padding: 0 12px 0 8px;
+  border: 0; border-radius: var(--radius);
+  background: var(--hueso);
+  color: var(--on-accent);
+  font-family: var(--f-texto); font-size: 12px; font-weight: 700;
   cursor: grab;
   overflow: hidden;
   white-space: nowrap;
   text-align: left;
 }
 .dock-clip span { overflow: hidden; text-overflow: ellipsis; }
-.dock-clip.auto { background: linear-gradient(90deg, var(--accent), #7FA6FF); }
-.dock-clip.locked { cursor: not-allowed; background: var(--line-2); color: var(--text-2); }
+.dock-clip.auto { background-image: repeating-linear-gradient(90deg, transparent 0 7px, rgba(14, 14, 12, .1) 7px 8px); }
+.dock-clip.is-active { background-color: var(--lima); box-shadow: inset 0 0 0 1px var(--negro); z-index: 2; }
+.dock-clip.locked {
+  cursor: not-allowed;
+  background-color: var(--surface-3);
+  background-image: repeating-linear-gradient(135deg, rgba(242, 239, 230, .1) 0 4px, transparent 4px 8px);
+  color: var(--text-2);
+}
+.dock-clip.locked.is-active { box-shadow: inset 0 0 0 2px var(--lima); }
 .dock-clip.hidden-layer { opacity: .38; }
+.dock-clip:focus-visible { outline: 2px solid var(--negro); outline-offset: -4px; box-shadow: inset 0 0 0 2px var(--highlight); }
 .dock-clip .clip-resize {
   position: absolute; right: 0; top: 0; bottom: 0;
   width: 8px;
   cursor: ew-resize;
-  background: rgba(0, 0, 0, .22);
+  background: rgba(14, 14, 12, .35);
   z-index: 3;
 }
 
@@ -130,14 +186,14 @@
 .clip-fx {
   position: absolute; top: 0; bottom: 0;
   pointer-events: none;
-  background: rgba(6, 16, 39, .34);
+  background: rgba(14, 14, 12, .28);
 }
-.clip-fx.in { left: 0; border-right: 1px solid rgba(6, 16, 39, .6); }
-.clip-fx.out { right: 8px; border-left: 1px solid rgba(6, 16, 39, .6); }
+.clip-fx.in { left: 0; border-right: 1px solid rgba(14, 14, 12, .6); }
+.clip-fx.out { right: 8px; border-left: 1px solid rgba(14, 14, 12, .6); }
 .clip-fx::after {
   content: '';
   position: absolute; inset: 0;
-  background: repeating-linear-gradient(115deg, rgba(255, 255, 255, .16) 0 2px, transparent 2px 6px);
+  background: repeating-linear-gradient(115deg, rgba(14, 14, 12, .18) 0 2px, transparent 2px 6px);
 }
 .clip-fx > i {
   position: absolute; top: 0; bottom: 0;
@@ -151,60 +207,63 @@
 .clip-fx > i::before {
   content: '';
   position: absolute; top: 4px; bottom: 4px; left: 3px;
-  width: 3px; border-radius: 2px;
-  background: rgba(255, 255, 255, .85);
+  width: 3px;
+  background: var(--negro);
   opacity: 0;
-  transition: opacity .15s;
 }
-.dock-row:hover .clip-fx > i::before,
+.dock-clip:hover .clip-fx > i::before,
 .dock-row.active .clip-fx > i::before { opacity: 1; }
 
 /* Pistas de entrada y salida en el panel de movimiento. */
 .track-tabs { margin-bottom: 11px; }
 .track-tabs button { gap: 6px; min-height: 30px; font-size: 12px; }
 .track-dot {
-  width: 5px; height: 5px; border-radius: 50%;
-  background: var(--accent);
+  width: 6px; height: 6px;
+  background: var(--lima);
   flex: 0 0 auto;
 }
 .motion-tag.go { background: var(--go-soft); color: var(--go); }
 
+/* Pista única de subtítulos (modo «Subtítulos»). */
+.lane-title { padding-left: 2px; font-size: 12px; font-weight: 700; color: var(--text); }
+.lane-count { margin-left: 6px; color: var(--text-2); font-family: var(--f-mono); font-size: 11px; font-variant-numeric: tabular-nums; }
 
-/* ========================= PISTA ÚNICA DE SUBTÍTULOS ====================== */
+/* ---- V1 / A1 (sticky abajo, fuera de lanesRef) ---- */
+.dock-media { position: sticky; bottom: 0; z-index: 7; background: var(--bg); border-top: 1px solid var(--line-2); }
+.dock-media .dock-row:last-child { border-bottom: 0; }
+.video-block {
+  height: 100%; display: flex; align-items: center; padding: 0 10px;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-family: var(--f-mono); font-size: 11px;
+  overflow: hidden; white-space: nowrap;
+}
+.video-block span { overflow: hidden; text-overflow: ellipsis; }
+.waveform { height: 34px; margin: 0; color: var(--text-2); background: transparent; overflow: hidden; }
+.waveform svg { height: 34px; display: block; }
 
-.lane-row .dock-lane { background: var(--bg); }
-.lane-title { padding-left: 6px; font-size: 12px; font-weight: 700; color: var(--text); }
-.lane-count { margin-left: 6px; color: var(--text-3); font-size: 11px; font-variant-numeric: tabular-nums; }
-.dock-clip.is-active { outline: 2px solid var(--text); outline-offset: -2px; z-index: 2; }
-.segmented.tiny button { padding: 4px 9px; font-size: 11.5px; }
+/* ---- Cabezal único ---- */
+.dock-playhead {
+  position: absolute; top: 0; bottom: 0; z-index: 8;
+  left: calc(var(--timeline-label) + (100% - var(--timeline-label)) * var(--p, 0));
+  width: 2px; margin-left: -1px;
+  background: var(--lima);
+  pointer-events: none;
+}
 
-
-/* ===== Dock y pistas (antes «Editor refinements») ===== */
-.dock { height: var(--timeline-height); min-height: 160px; max-height: 45vh; grid-template-rows: auto minmax(0, 1fr) auto; }
-.dock-title { font-size: 12px; }
-.dock-head { align-items: center; flex-wrap: wrap; }
-.dock-head-actions { align-items: center; flex-wrap: wrap; }
-.timeline-zoom { font-size: 12px; }
-.timeline-scroll { min-height: 0; overflow: auto; scrollbar-gutter: stable; }
-.timeline-content { min-width: 640px; padding: 10px 8px 6px; }
-.dock-ruler { margin-left: var(--timeline-label); margin-bottom: 7px; height: 17px; }
-.dock-ruler span { font-size: 11px; }
-.dock-tracks { display: block; }
-.dock-rows { overflow: visible; padding: 0; }
-.dock-row { grid-template-columns: calc(var(--timeline-label) - 4px) minmax(0, 1fr); }
-.dock-lane { height: 34px; }
-.dock-row-name { font-size: 12px; }
-.dock-row-actions button { width: 24px; height: 26px; }
-.dock-playhead { top: 0; bottom: 0; margin: 0; z-index: 5; }
-.dock-clip { font-size: 12px; }
-input.dock-scrubber { appearance: none; display: block; width: calc(100% - var(--timeline-label) + 16px); margin: 0 0 5px calc(var(--timeline-label) - 8px); height: 22px; background: transparent; cursor: pointer; }
-.dock-scrubber::-webkit-slider-runnable-track { height: 3px; background: var(--line-2); border-radius: 3px; }
-.dock-scrubber::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); margin-top: -6.5px; }
-.dock-scrubber::-moz-range-thumb { width: 16px; height: 16px; border: 0; background: var(--accent); border-radius: 50%; }
-.dock-scrubber::-moz-range-track { height: 3px; background: var(--line-2); }
-.clip-times { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--text-2); }
-.clip-times input { width: 68px; background: var(--bg); border: 1px solid var(--line-2); border-radius: 5px; padding: 4px; }
-.waveform { margin-left: var(--timeline-label); height: 40px; color: #74c9b4; background: #102822; border-radius: 4px; overflow: hidden; }
-.waveform svg { height: 40px; display: block; }
-.dock-row.multi-selected { outline: 1px solid var(--accent-line); background: var(--accent-soft); }
-@media(max-width: 680px) { .dock { max-height: 30vh; padding: 6px; } .dock-head-actions { gap: 4px; } .dock-title, .dock-total, .timeline-zoom { display: none; } }
+/* ---- Pie Inicio / Duración ---- */
+.clip-times {
+  display: flex; align-items: center; flex-wrap: nowrap; gap: 14px;
+  height: 32px; padding: 0 12px;
+  border-top: 1px solid var(--line-2);
+  font-size: 12px; color: var(--text-2);
+  overflow: hidden;
+}
+.clip-times label { display: inline-flex; align-items: center; gap: 6px; font-family: var(--f-mono); white-space: nowrap; }
+.clip-times input {
+  width: 72px; height: 24px; padding: 0 5px;
+  background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--radius);
+  font-family: var(--f-mono); font-size: 13px; font-variant-numeric: tabular-nums;
+}
+.clip-times input:focus { border-color: var(--lima); }
+.clip-times > span { margin-left: auto; font-family: var(--f-mono); font-size: 11px; color: var(--text-3); white-space: nowrap; }

@@ -1,5 +1,5 @@
-import { Copy, Eye, EyeOff, Lock, LockOpen, Plus, Trash2, Wand2 } from 'lucide-react';
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { Copy, Eye, EyeOff, Lock, LockOpen, Magnet, Plus, Scissors, Trash2, Wand2 } from 'lucide-react';
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import type { TextLayer } from '../types/motion';
 import { getLayerDuration, isAutoDuration } from '../utils/duration';
 import { formatClock } from './timecode';
@@ -28,7 +28,7 @@ type Props = {
 };
 
 export const TimelineDock = ({
-  layers, activeId, selectedIds, duration, currentFrame, canAdd, onSplit, waveform, guideDuration,
+  layers, activeId, selectedIds, duration, currentFrame, canAdd, onSplit, waveform, guideDuration, guideName,
   onSeek, onSelect, onChange, onBeginInteraction, onAdd, onDuplicate, onDelete, onToggleVisible, onToggleLock,
 }: Props) => {
   const lanesRef = useRef<HTMLDivElement>(null);
@@ -178,16 +178,15 @@ export const TimelineDock = ({
     <section className="dock" aria-label="Cuándo aparece cada frase">
       <div className="dock-head">
         <span className="dock-title">Tus frases</span>
-        <output className="dock-clock">{formatClock(currentFrame)}<i>:{String(Math.floor(currentFrame % 30)).padStart(2, '0')}</i></output>
-        <span className="dock-total">de {formatClock(duration)}</span>
+        <small className="lane-count">{layers.length}</small>
         <div className="dock-head-actions">
           <div className="segmented tiny" role="group" aria-label="Cómo se muestran las frases">
             <button type="button" className={compact ? 'on' : ''} aria-pressed={compact} onClick={() => setLaneChoice('lane')}>Subtítulos</button>
             <button type="button" className={compact ? '' : 'on'} aria-pressed={!compact} onClick={() => setLaneChoice('rows')}>Pistas</button>
           </div>
-          <button type="button" className="ghost-button tiny" aria-pressed={snap} onClick={() => setSnap(!snap)}>Imán {snap ? 'activo' : 'inactivo'}</button>
+          <button type="button" className="ghost-button tiny" aria-pressed={snap} onClick={() => setSnap(!snap)}><Magnet size={12} aria-hidden="true" /> Imán {snap ? 'activo' : 'inactivo'}</button>
           <label className="timeline-zoom">Zoom <select aria-label="Zoom de la línea de tiempo" value={zoom} onChange={(e) => setZoom(Number(e.target.value))}>{[1, 2, 4, 8].map((z) => <option key={z} value={z}>{z}×</option>)}</select></label>
-          <button type="button" className="ghost-button tiny" disabled={!canAdd || !activeLayer || activeLayer.locked || currentFrame <= activeLayer.startFrame || currentFrame >= activeLayer.startFrame + getLayerDuration(activeLayer) - 1} onClick={onSplit}>Dividir aquí</button>
+          <button type="button" className="ghost-button tiny" disabled={!canAdd || !activeLayer || activeLayer.locked || currentFrame <= activeLayer.startFrame || currentFrame >= activeLayer.startFrame + getLayerDuration(activeLayer) - 1} onClick={onSplit}><Scissors size={12} aria-hidden="true" /> Dividir aquí</button>
           {activeLayer && !activeAuto && (
             <button type="button" className="ghost-button tiny" disabled={activeLayer.locked} onClick={() => { onBeginInteraction(); onChange(activeId, { durationFrames: undefined }); }}>
               <Wand2 size={12} /> Duración automática
@@ -199,17 +198,12 @@ export const TimelineDock = ({
         </div>
       </div>
 
-      <div className="timeline-scroll" ref={scrollRef} onScroll={readView}><div className="timeline-content" style={{ width: `${zoom * 100}%` }}>
-      <div className="dock-ruler" aria-hidden="true">
-        {ticks.map((frame) => <span key={frame} style={{ left: `${frame / span * 100}%` }}>{formatClock(frame)}</span>)}
-      </div>
-
-      {waveform && waveform.length > 0 && <div className="waveform" aria-label="Forma de onda del audio de referencia">
-        <svg viewBox={`0 0 ${waveform.length} 40`} preserveAspectRatio="none" style={{ width: `${Math.min(1, (guideDuration ?? duration) / duration) * 100}%` }}>
-          <path d={waveform.map((peak, i) => `M${i},${20 - peak * 19}v${Math.max(0.5, peak * 38)}`).join(' ')} stroke="currentColor" strokeWidth="1" />
-        </svg>
-      </div>}
-      <div className="dock-tracks">
+      <div className="timeline-scroll" ref={scrollRef} onScroll={readView}><div className="timeline-content" style={{ width: `${zoom * 100}%`, '--p': Math.min(currentFrame, lastFrame) / span } as CSSProperties}>
+      <div className="dock-ruler-row">
+        <span className="dock-corner" aria-hidden="true" />
+        <div className="dock-ruler" aria-hidden="true">
+          {ticks.map((frame) => <span key={frame} style={{ left: `${frame / span * 100}%` }}>{formatClock(frame)}</span>)}
+        </div>
         <input
           className="dock-scrubber"
           aria-label="Posición del video"
@@ -220,50 +214,68 @@ export const TimelineDock = ({
           onInput={(event) => onSeek(Number(event.currentTarget.value))}
           onChange={(event) => onSeek(Number(event.target.value))}
         />
-        <div className="dock-rows" ref={lanesRef}>
-
-          {compact ? (
-            <div className="dock-row lane-row">
-              <div className="dock-row-head"><span className="lane-title">Subtítulos</span><small className="lane-count">{layers.length}</small></div>
+      </div>
+      <div className="dock-rows" ref={lanesRef}>
+        {compact ? (
+          <div className="dock-row lane-row">
+            <div className="dock-row-head"><b className="track-code" aria-hidden="true">1</b><span className="lane-title">Subtítulos</span><small className="lane-count">{layers.length}</small></div>
+            <div className="dock-lane">
+              {layers.filter((layer) => {
+                // Sólo se dibujan los clips que caen en lo que se ve (con un margen para el arrastre).
+                const start = Math.max(0, layer.startFrame ?? 0) / span;
+                const end = (Math.max(0, layer.startFrame ?? 0) + getLayerDuration(layer)) / span;
+                return layer.id === activeId || (end >= view.from - 0.1 && start <= view.to + 0.1);
+              }).map((layer) => renderClip(layer))}
+            </div>
+          </div>
+        ) : layers.map((layer, index) => {
+          const active = activeId === layer.id;
+          return (
+            <div className={`dock-row ${active ? 'active' : ''} ${selectedIds.includes(layer.id) ? 'multi-selected' : ''}`} key={layer.id}>
+              <div className="dock-row-head">
+                <input type="checkbox" className="layer-select" aria-label={`Seleccionar ${layer.name} en grupo`} checked={selectedIds.includes(layer.id)} onChange={() => onSelect(layer.id, true)} />
+                <button type="button" className="dock-row-name" onClick={() => onSelect(layer.id)} title={layer.text}>
+                  <b className="track-code">{index + 1}</b><span>{layer.name}</span>
+                </button>
+                <div className="dock-row-actions">
+                  <button type="button" aria-label={layer.visible ? `Ocultar ${layer.name}` : `Mostrar ${layer.name}`} onClick={() => onToggleVisible(layer.id)}>
+                    {layer.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+                  </button>
+                  <button type="button" aria-label={layer.locked ? `Desbloquear ${layer.name}` : `Bloquear ${layer.name}`} onClick={() => { onBeginInteraction(); onToggleLock(layer.id); }}>
+                    {layer.locked ? <Lock size={13} /> : <LockOpen size={13} />}
+                  </button>
+                  <button type="button" aria-label={`Duplicar ${layer.name}`} onClick={() => onDuplicate(layer.id)}><Copy size={13} /></button>
+                  <button type="button" aria-label={`Eliminar ${layer.name}`} disabled={layers.length === 1 || layer.locked} onClick={() => onDelete(layer.id)}><Trash2 size={13} /></button>
+                </div>
+              </div>
               <div className="dock-lane">
-                <span className="dock-playhead" style={{ left: `${Math.min(currentFrame, lastFrame) / span * 100}%` }} aria-hidden="true" />
-                {layers.filter((layer) => {
-                  // Sólo se dibujan los clips que caen en lo que se ve (con un margen para el arrastre).
-                  const start = Math.max(0, layer.startFrame ?? 0) / span;
-                  const end = (Math.max(0, layer.startFrame ?? 0) + getLayerDuration(layer)) / span;
-                  return layer.id === activeId || (end >= view.from - 0.1 && start <= view.to + 0.1);
-                }).map((layer) => renderClip(layer))}
+                {renderClip(layer)}
               </div>
             </div>
-          ) : layers.map((layer, index) => {
-            const active = activeId === layer.id;
-            return (
-              <div className={`dock-row ${active ? 'active' : ''} ${selectedIds.includes(layer.id) ? 'multi-selected' : ''}`} key={layer.id}>
-                <div className="dock-row-head">
-                  <input type="checkbox" className="layer-select" aria-label={`Seleccionar ${layer.name} en grupo`} checked={selectedIds.includes(layer.id)} onChange={() => onSelect(layer.id, true)} />
-                  <button type="button" className="dock-row-name" onClick={() => onSelect(layer.id)} title={layer.text}>
-                    <b>{index + 1}</b><span>{layer.name}</span>
-                  </button>
-                  <div className="dock-row-actions">
-                    <button type="button" aria-label={layer.visible ? `Ocultar ${layer.name}` : `Mostrar ${layer.name}`} onClick={() => onToggleVisible(layer.id)}>
-                      {layer.visible ? <Eye size={13} /> : <EyeOff size={13} />}
-                    </button>
-                    <button type="button" aria-label={layer.locked ? `Desbloquear ${layer.name}` : `Bloquear ${layer.name}`} onClick={() => { onBeginInteraction(); onToggleLock(layer.id); }}>
-                      {layer.locked ? <Lock size={13} /> : <LockOpen size={13} />}
-                    </button>
-                    <button type="button" aria-label={`Duplicar ${layer.name}`} onClick={() => onDuplicate(layer.id)}><Copy size={13} /></button>
-                    <button type="button" aria-label={`Eliminar ${layer.name}`} disabled={layers.length === 1 || layer.locked} onClick={() => onDelete(layer.id)}><Trash2 size={13} /></button>
-                  </div>
-                </div>
-                <div className="dock-lane">
-                  <span className="dock-playhead" style={{ left: `${Math.min(currentFrame, lastFrame) / span * 100}%` }} aria-hidden="true" />
-                  {renderClip(layer)}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+          );
+        })}
       </div>
+      {(guideDuration || (waveform && waveform.length > 0)) && <div className="dock-media">
+        {guideDuration ? <div className="dock-row media-row">
+          <div className="dock-row-head"><b className="track-code">V1</b><span className="track-name">Video</span></div>
+          <div className="dock-lane">
+            <div className="video-block" role="img" aria-label={`Video de referencia${guideName ? `: ${guideName}` : ''}`} style={{ width: `${Math.min(1, guideDuration / span) * 100}%` }}>
+              <span>{guideName ?? 'Video'}</span>
+            </div>
+          </div>
+        </div> : null}
+        {waveform && waveform.length > 0 && <div className="dock-row media-row">
+          <div className="dock-row-head"><b className="track-code">A1</b><span className="track-name">Audio</span></div>
+          <div className="dock-lane">
+            <div className="waveform" aria-label="Forma de onda del audio de referencia">
+              <svg viewBox={`0 0 ${waveform.length} 40`} preserveAspectRatio="none" style={{ width: `${Math.min(1, (guideDuration ?? duration) / duration) * 100}%` }}>
+                <path d={waveform.map((peak, i) => `M${i},${20 - peak * 19}v${Math.max(0.5, peak * 38)}`).join(' ')} stroke="currentColor" strokeWidth="1" />
+              </svg>
+            </div>
+          </div>
+        </div>}
+      </div>}
+      <span className="dock-playhead" aria-hidden="true" />
       </div></div>
       {activeLayer && <div className="clip-times">
         <label>Inicio <input type="number" aria-label="Inicio de la frase en segundos" min={0} step={1 / 30} value={Number((activeLayer.startFrame / 30).toFixed(2))} disabled={activeLayer.locked} onChange={(e) => { if (e.target.value !== '') onChange(activeId, { startFrame: Math.max(0, Math.round(Number(e.target.value) * 30)) }); }} /> s</label>

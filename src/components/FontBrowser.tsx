@@ -95,7 +95,7 @@ export const FontBrowser = ({ fontFamily, text, onSelect }: Props) => {
         aria-controls="font-browser-panel"
         onClick={() => setOpen((value) => !value)}
       >
-        <span style={{ fontFamily: `"${selected.family}"`, fontWeight: selected.defaultWeight }}>{selected.displayName}</span>
+        <span data-font-preview style={{ fontFamily: `"${selected.family}"`, fontWeight: selected.defaultWeight }}>{selected.displayName}</span>
         <small>{fontCategoryLabels[selected.category]}</small>
         <ChevronDown size={16} aria-hidden="true" />
       </button>
@@ -120,7 +120,7 @@ export const FontBrowser = ({ fontFamily, text, onSelect }: Props) => {
               <div className={`font-option ${definition.id === selected.id ? 'selected' : ''}`} key={definition.id}>
                 <button type="button" className="font-option-main" onClick={() => choose(definition)}>
                   <span className="font-option-name">{definition.displayName}</span>
-                  <strong style={{ fontFamily: `"${definition.family}"`, fontWeight: definition.defaultWeight }}>{text.trim().slice(0, 70) || 'Tu próxima gran idea'}</strong>
+                  <strong data-font-preview style={{ fontFamily: `"${definition.family}"`, fontWeight: definition.defaultWeight }}>{text.trim().slice(0, 70) || 'Tu próxima gran idea'}</strong>
                   <small>{fontCategoryLabels[definition.category]} · {definition.availableStyles.includes('italic') ? 'con cursiva' : 'sin cursiva'}</small>
                 </button>
                 <button
