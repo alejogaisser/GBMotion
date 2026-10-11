@@ -99,19 +99,22 @@ export const useGuide = ({ initialMediaId, initialName, flashHint }: Options) =>
   /** Vuelve a conectar un video ya subido (después de recargar o de abrir un proyecto). */
   const relinkGuide = async (mediaId: string, name: string) => {
     const token = begin();
-    setGuideMediaId(mediaId);
+    // La nueva selección invalida también la pareja preview/id anterior.
+    setGuideName(''); setGuideMediaId(''); setGuideUpload({ status: 'idle', progress: 0 });
+    setGuide((current) => { if (current) revokeBlob(current.src); return null; });
     const exists = await mediaExists(mediaId);
     if (uploadToken.current !== token) return;
-    if (!exists) { setGuideMediaId(''); return; }
+    if (!exists) { flashHint('No encuentro ese video. Volvé a subirlo en «Video».'); return; }
     const src = mediaUrl(mediaId);
     try {
       const seconds = await readDuration(src);
       if (uploadToken.current !== token) return;
       if (!Number.isFinite(seconds) || seconds <= 0) throw new Error('duración desconocida');
       setGuideName(name);
+      setGuideMediaId(mediaId);
       setGuide((current) => { if (current) revokeBlob(current.src); return { src, name: name || 'video', durationInFrames: Math.round(seconds * 30), volume: 1, mediaId }; });
     } catch {
-      if (uploadToken.current === token) setGuideMediaId('');
+      if (uploadToken.current === token) flashHint('No pude leer ese video. Volvé a subirlo en «Video».');
     }
   };
   useEffect(() => { if (initialMediaId) void relinkGuide(initialMediaId, initialName ?? ''); }, []);
