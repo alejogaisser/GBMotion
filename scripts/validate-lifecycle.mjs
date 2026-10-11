@@ -37,7 +37,7 @@ class Host {
 }
 const wait = (ms) => new Promise((done) => setTimeout(done, ms));
 const until = async (condition, description, timeout = 6000) => {
-  const started = Date.now(); while (!condition()) { if (Date.now() - started > timeout) throw new Error(`timeout: ${description}`); await wait(10); }
+  const started = performance.now(); while (!condition()) { if (performance.now() - started > timeout) throw new Error(`timeout: ${description}`); await wait(10); }
 };
 const { useTranscription } = await import('../src/hooks/useTranscription.ts');
 const { useExport } = await import('../src/hooks/useExport.ts');
@@ -45,7 +45,7 @@ const { useGuide } = await import('../src/hooks/useGuide.ts');
 const { useServerCapabilities } = await import('../src/hooks/useServerCapabilities.ts');
 const { createTextLayer } = await import('../src/remotion/defaults.ts');
 const template = createTextLayer('UNO DOS', 'one');
-const jobs = new Map(); const starts = []; const deletes = []; let healthCount = 0; let healthHold;
+const jobs = new Map(); const starts = []; const deletes = []; const polls = []; let healthCount = 0; let healthHold;
 const words = [{ text: 'UNO', startMs: 0, endMs: 500, confidence: 1 }, { text: 'DOS', startMs: 500, endMs: 1000, confidence: 1 }];
 const reply = (res, status, payload) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(payload)); };
 const server = createServer(async (req, res) => {
@@ -53,7 +53,7 @@ const server = createServer(async (req, res) => {
   if (path === '/api/health') { healthCount++; if (healthHold) return healthHold(res); return reply(res, 200, { version: 1, mode: 'local', transcriptionMode: 'mock', capabilities: { upload: true, render: true, transcribe: true } }); }
   if (path === '/api/transcribe/providers') return reply(res, 200, { providers: [{ id: 'elevenlabs', label: 'Mock', configured: true }] });
   if (path === '/api/exports') return reply(res, 200, { files: [] });
-  if (path?.startsWith('/media/') && req.method === 'HEAD') { res.writeHead(200); res.end(); return; }
+  if (path?.startsWith('/media/') && req.method === 'HEAD') { res.writeHead(path.includes('missing') ? 404 : 200); res.end(); return; }
   if (req.method === 'POST') {
     for await (const _chunk of req) { /* receive body before allocating a real job */ }
     const id = `job-${jobs.size + 1}`;
@@ -63,7 +63,7 @@ const server = createServer(async (req, res) => {
   }
   const id = path?.split('/').at(-1); const job = jobs.get(id);
   if (req.method === 'DELETE') { assert(job, 'DELETE must name the real server job'); deletes.push(id); job.status = 'cancelled'; return reply(res, 200, { status: 'cancelled' }); }
-  if (job) return reply(res, 200, path.includes('transcribe') ? { status: 'done', stage: 'done', words } : { status: 'done', url: '/exports/final.mp4' });
+  if (job) { polls.push(id); return reply(res, 200, path.includes('transcribe') ? { status: 'done', stage: 'done', words } : { status: 'done', url: `/exports/${id}.mp4` }); }
   reply(res, 404, { error: 'No existe ese trabajo.' });
 });
 const nativeFetch = globalThis.fetch;
@@ -128,6 +128,20 @@ try {
     await host.model.exportVideo('green'); assert.equal(starts.length, before); host.unmount();
   }
   {
+    const nativeNow = Date.now; Date.now = () => 1;
+    const host = new Host(useExport, exportOptions);
+    try {
+      const before = starts.length; const first = host.model.exportVideo('green');
+      await until(() => starts.length > before, 'same-ms first render'); const old = starts.at(-1);
+      await host.model.cancelExport(); const second = host.model.exportVideo('green');
+      await until(() => starts.length > before + 1, 'same-ms replacement render'); const fresh = starts.at(-1);
+      old.release(); await first; fresh.release(); await second;
+      assert(deletes.includes(old.id)); assert(!deletes.includes(fresh.id)); assert(!polls.includes(old.id)); assert(polls.includes(fresh.id));
+      assert.equal(downloadCount, 1); assert.equal(host.render().exportState.url, `/exports/${fresh.id}.mp4`);
+      downloadCount = 0;
+    } finally { host.unmount(); Date.now = nativeNow; }
+  }
+  {
     let busy = false;
     const host = new Host(useServerCapabilities, { isBusy: () => busy });
     await until(() => host.render().status === 'ready', 'health ready');
@@ -176,9 +190,14 @@ try {
     const linkA = relink.model.relinkGuide('a-id', 'A'); await until(() => probes.length > startProbe, 'relink A metadata');
     const linkB = relink.model.relinkGuide('b-id', 'B'); await until(() => probes.length > startProbe + 1, 'relink B metadata');
     probes[startProbe + 1].onloadedmetadata(); await linkB; probes[startProbe].onloadedmetadata(); await linkA;
-    assert.equal(relink.render().guideMediaId, 'b-id'); assert.equal(relink.model.guide.name, 'B'); relink.unmount(); assert.equal(relink.lateUpdates, 0);
+    assert.equal(relink.render().guideMediaId, 'b-id'); assert.equal(relink.model.guide.name, 'B');
+    const pendingProbe = probes.length; const linkC = relink.model.relinkGuide('c-id', 'C'); await until(() => probes.length > pendingProbe, 'relink C pending');
+    assert.equal(relink.render().guide, null); assert.equal(relink.model.guideMediaId, '');
+    probes[pendingProbe].onloadedmetadata(); await linkC; assert.equal(relink.render().guideMediaId, 'c-id');
+    await relink.model.relinkGuide('missing-id', 'Missing'); assert.equal(relink.render().guide, null); assert.equal(relink.model.guideMediaId, '');
+    relink.unmount(); assert.equal(relink.lateUpdates, 0);
   } finally { URL.createObjectURL = nativeCreate; URL.revokeObjectURL = nativeRevoke; }
-  console.log('LIFECYCLE_OK AC9-selected/remove/relink/unmount AC10 AC11 delayed real HTTP 202 and polling, synchronous locks; AC7 HTML/schema/recovery AC36 busy failure/timeout/retry');
+  console.log('LIFECYCLE_OK AC9-selected/remove/relink-pair/404/unmount AC10 AC11 delayed real HTTP 202 and polling, same-ms restart, synchronous locks; AC7 HTML/schema/recovery AC36 busy failure/timeout/retry');
 } finally {
   globalThis.fetch = nativeFetch;
   await new Promise((done) => { server.close(done); server.closeAllConnections(); });
