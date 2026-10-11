@@ -14,7 +14,7 @@ export class HttpError extends Error {
 /**
  * Junta el cuerpo como Buffers y decodifica una sola vez al final: decodificar
  * chunk por chunk rompe una ñ o una tilde que quede partida entre dos chunks.
- * Si pasa el límite corta la conexión en vez de seguir leyendo.
+ * Si pasa el límite deja de acumular; la respuesta 413 cierra el socket al terminar.
  */
 export const readBody = (req: IncomingMessage, limitBytes: number): Promise<Buffer> => new Promise((resolve, reject) => {
   const chunks: Buffer[] = [];
@@ -32,7 +32,6 @@ export const readBody = (req: IncomingMessage, limitBytes: number): Promise<Buff
     if (size > limitBytes) {
       chunks.length = 0;
       fail(new HttpError(413, 'El pedido es demasiado grande.'));
-      req.destroy();
       return;
     }
     chunks.push(buffer);
@@ -52,6 +51,10 @@ export const readJson = async (req: IncomingMessage, limitBytes = 16 * 1024 * 10
 };
 
 export const json = (response: ServerResponse, status: number, payload: unknown) => {
+  if (status === 413) {
+    response.setHeader('Connection', 'close');
+    response.once('finish', () => response.socket?.destroy());
+  }
   response.statusCode = status;
   response.setHeader('Content-Type', 'application/json; charset=utf-8');
   response.end(JSON.stringify(payload));
