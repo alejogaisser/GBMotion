@@ -12,6 +12,8 @@ type Props = {
   onPick: (file: File) => void;
   onVolume: (volume: number) => void;
   onRemove: () => void;
+  /** Por qué no se puede subir un video ahora (sin servidor, etc.); null si se puede. */
+  uploadBlockedReason?: string | null;
 };
 
 const clock = (frames: number) => {
@@ -19,7 +21,7 @@ const clock = (frames: number) => {
   return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 };
 
-export const GuidePanel = ({ guide, upload, expectedName, formatLabel, onPick, onVolume, onRemove }: Props) => {
+export const GuidePanel = ({ guide, upload, expectedName, formatLabel, onPick, onVolume, onRemove, uploadBlockedReason = null }: Props) => {
   const input = useRef<HTMLInputElement>(null);
 
   return (
@@ -38,11 +40,12 @@ export const GuidePanel = ({ guide, upload, expectedName, formatLabel, onPick, o
 
       {!guide ? (
         <div className="panel-block">
-          <button type="button" className="guide-drop" onClick={() => input.current?.click()}>
+          <button type="button" className="guide-drop" disabled={Boolean(uploadBlockedReason)} onClick={() => input.current?.click()}>
             <Film size={22} aria-hidden="true" />
             <strong>{expectedName ? 'Volver a vincular el video' : 'Subir un video'}</strong>
             <small>{expectedName || 'Para calzar los subtítulos con la imagen y el audio.'}</small>
           </button>
+          {uploadBlockedReason && <p className="hint blocked-reason" role="status">{uploadBlockedReason}</p>}
           <p className="hint">
             El video se guarda en esta computadora para que no tengas que subirlo de nuevo.
             El MP4 con fondo verde sigue saliendo sin el video, para componer en CapCut; el
@@ -68,7 +71,7 @@ export const GuidePanel = ({ guide, upload, expectedName, formatLabel, onPick, o
                   ? `Subiendo… ${Math.round(upload.progress * 100)}%`
                   : 'No se pudo guardar el video: sirve para mirar, pero no para exportarlo con subtítulos.'}
             </p>
-            <button type="button" className="ghost-button" onClick={() => input.current?.click()}>
+            <button type="button" className="ghost-button" disabled={Boolean(uploadBlockedReason)} title={uploadBlockedReason ?? undefined} onClick={() => input.current?.click()}>
               <Upload size={13} /> Cambiar el video
             </button>
           </div>

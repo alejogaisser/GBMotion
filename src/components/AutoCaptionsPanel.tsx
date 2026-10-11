@@ -1,20 +1,17 @@
 import { Loader2, Wand2 } from 'lucide-react';
 import type { TranscribeLanguage, TranscribeProviderId } from '../captions/types';
-import { useTranscription } from '../hooks/useTranscription';
-import type { TextLayer, WordHighlightMode } from '../types/motion';
+import type { TranscriptionModel } from '../hooks/useTranscription';
+import type { WordHighlightMode } from '../types/motion';
 import type { TranscribeStage } from '../utils/mediaClient';
 
 type Props = {
-  /** Id del video guardado en el servidor; vacío si todavía no hay uno. */
-  mediaId: string;
-  /** La frase seleccionada: su look y su movimiento se pueden usar como plantilla. */
-  templateLayer: TextLayer;
-  createId: () => string;
-  /** Aplica los subtítulos como un solo paso de historial. Devuelve un mensaje si no entran. */
-  onApply: (layers: TextLayer[], mode: 'replace' | 'append') => string | null;
+  /** El estado vive en App: cambiar de herramienta no pierde el trabajo en curso. */
+  model: TranscriptionModel;
+  /** Por qué no se puede generar ahora (sin servidor, sin video, etc.); null si se puede. */
+  disabledReason?: string | null;
 };
 
-const stageText: Record<TranscribeStage, string> = {
+export const stageText: Record<TranscribeStage, string> = {
   extracting: 'Extrayendo el audio…',
   uploading: 'Enviando el audio a la IA…',
   transcribing: 'Transcribiendo…',
@@ -30,12 +27,11 @@ const highlights: { id: WordHighlightMode; label: string }[] = [
   { id: 'scale', label: 'Crece la palabra activa' },
 ];
 
-export const AutoCaptionsPanel = ({ mediaId, templateLayer, createId, onApply }: Props) => {
-  const t = useTranscription({ mediaId, templateLayer, createId, onApply });
+export const AutoCaptionsPanel = ({ model: t, disabledReason = null }: Props) => {
   const {
     providers, language, setLanguage, provider, setProvider, maxWords, setMaxWords, maxChars, setMaxChars,
     onSilence, setOnSilence, removeFillers, setRemoveFillers, highlight, setHighlight, color, setColor,
-    useLook, setUseLook, applyMode, setApplyMode, stage, running, error, done, generate, cancel,
+    useLook, setUseLook, applyMode, setApplyMode, stage, running, error, done, generate,
   } = t;
   const configured = providers.filter((item) => item.configured);
 
@@ -85,16 +81,15 @@ export const AutoCaptionsPanel = ({ mediaId, templateLayer, createId, onApply }:
       </div>
       <p className="hint">«Reemplazar» borra las frases actuales y conserva las bloqueadas.</p>
 
-      <button type="button" className="button primary block" disabled={running || !mediaId} onClick={() => void generate()}>
+      <button type="button" className="button primary block" disabled={running || Boolean(disabledReason)} onClick={() => void generate()}>
         {running ? <Loader2 size={14} className="spin" /> : <Wand2 size={14} />} Generar subtítulos
       </button>
-      {!mediaId && <p className="hint">Primero subí un video.</p>}
+      {disabledReason && <p className="hint blocked-reason" role="status">{disabledReason}</p>}
 
       {running && stage && (
         <div className="export-status" role="status" aria-live="polite">
           <Loader2 size={14} className="spin" /> <span>{stageText[stage]}</span>
-          <button type="button" className="linklike" onClick={cancel}>Cancelar</button>
-          <small className="hint">Si cancelás después de enviar el audio, el servicio igual puede cobrarlo.</small>
+          <small className="hint">Se cancela con el botón «Cancelar» de la barra de arriba. Si cancelás después de enviar el audio, el servicio igual puede cobrarlo.</small>
         </div>
       )}
       {done && <p className="hint" role="status">{done}</p>}
