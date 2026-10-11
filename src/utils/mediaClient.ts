@@ -15,8 +15,12 @@ const UPLOAD_ERROR = 'No pude subir el video. Revisá que GB Motion siga abierto
  * Sube el archivo al servidor local con XHR, porque `fetch` todavía no informa el
  * progreso de una subida. El cuerpo va crudo: así no pasa por memoria ni por un FormData.
  */
-export const uploadMedia = (file: File, onProgress: (fraction: number) => void): Promise<MediaInfo> => new Promise((resolve, reject) => {
+export const uploadMedia = (file: File, onProgress: (fraction: number) => void, signal?: AbortSignal): Promise<MediaInfo> => new Promise((resolve, reject) => {
+  if (signal?.aborted) { reject(new Error('Se canceló la subida del video.')); return; }
   const request = new XMLHttpRequest();
+  const abort = () => request.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  request.onloadend = () => signal?.removeEventListener('abort', abort);
   request.open('POST', '/api/media');
   request.setRequestHeader('Content-Type', 'application/octet-stream');
   request.setRequestHeader('X-File-Name', encodeURIComponent(file.name));
@@ -64,9 +68,11 @@ export const fetchProviders = async (): Promise<ProviderInfo[]> => {
   } catch { return []; }
 };
 
-export const startTranscription = async (input: { mediaId: string; language: TranscribeLanguage; provider?: TranscribeProviderId }): Promise<string> => {
+export const startTranscription = async (input: { mediaId: string; language: TranscribeLanguage; provider?: TranscribeProviderId }, signal?: AbortSignal): Promise<string> => {
+  if (signal?.aborted) throw new TranscribeError('Cancelado.', 'cancelled');
   let response: Response;
   try {
+    // Una vez enviado el POST, conservamos la respuesta para poder cancelar por jobId.
     response = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
   } catch { throw new TranscribeError('No pude conectar con GB Motion. Revisá que siga abierto.'); }
   const payload = await response.json().catch(() => ({})) as { jobId?: string; error?: string; code?: string };

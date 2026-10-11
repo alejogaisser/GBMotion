@@ -10,6 +10,8 @@ import {
 } from '../utils/mediaClient';
 
 type Options = {
+  /** Cambia cuando se reemplaza el proyecto, aunque conserve el mismo video. */
+  sessionKey?: string;
   /** Id del video guardado en el servidor; vacío si todavía no hay uno. */
   mediaId: string;
   /** La frase seleccionada: su look y su movimiento se pueden usar como plantilla. */
@@ -18,6 +20,8 @@ type Options = {
   /** Aplica los subtítulos como un solo paso de historial. Devuelve un mensaje si no entran. */
   onApply: (layers: TextLayer[], mode: 'replace' | 'append') => string | null;
 };
+
+export type TranscriptionModel = ReturnType<typeof useTranscription>;
 
 /** Opciones de los subtítulos automáticos y el ciclo de generarlos (extraer, enviar, transcribir, agrupar). */
 export const useTranscription = ({ mediaId, templateLayer, createId, onApply }: Options) => {
