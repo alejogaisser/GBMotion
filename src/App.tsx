@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
 import {
-  Captions, Check, Clapperboard, Download, Film, FolderOpen, HardDriveDownload, Loader2, Palette, Pause, Play, Redo2, RotateCcw, Save, Sliders, Type, Undo2, Volume2, VolumeX, Zap,
+  Captions, ChevronDown, Clapperboard, Download, FolderOpen, HardDriveDownload, Palette, Library, Pause, Play, Redo2, RotateCcw, Save, Sliders, Type, Undo2, Volume2, VolumeX, Zap,
 } from 'lucide-react';
 import { WordTimingPanel } from './components/WordTimingPanel';
 import { alignLayers, distributeLayers } from './engine/editorMotion';
@@ -23,6 +23,8 @@ import { EmptyState } from './components/EmptyState';
 import { SafeZoneOverlay, safeZoneLabels, type SafeZone } from './components/SafeZoneOverlay';
 import { CanvasOverlay } from './components/CanvasOverlay';
 import { TimelineDock } from './components/TimelineDock';
+import { Resizer } from './components/Resizer';
+import { formatTimecode } from './components/timecode';
 import type { SavePresetKind } from './components/SavePresetModal';
 import { TextComposition } from './remotion/TextComposition';
 import { formats, overridesFor } from './remotion/defaults';
@@ -419,15 +421,22 @@ export default function App() {
   const stageWidth = Math.max(1, Math.min(stageSize.width - 32, (stageSize.height - 32) * format.width / format.height)) * canvasZoom;
   const stageHeight = Math.max(1, Math.min(stageSize.height - 32, (stageSize.width - 32) * format.height / format.width)) * canvasZoom;
 
+  const recActive = exportState.status === 'rendering' || transcription.running;
+  const eyebrow = tool === 'texto' || tool === 'estilo' || tool === 'movimiento'
+    ? `T${layers.findIndex((layer) => layer.id === activeLayer.id) + 1} · ${activeLayer.name}`
+    : tool === 'video' ? `V1 · ${guideName || 'Sin video'}`
+    : tool === 'subtitulos' ? `${layers.length} frases`
+    : `${format.width} × ${format.height} · 30 fps`;
+
   return (
     <div className="app" style={{ '--panel-width': `${panelWidth}px`, '--timeline-height': `${timelineHeight}px` } as React.CSSProperties} onPointerDownCapture={recordHistory} onFocusCapture={recordHistory}
       onKeyDownCapture={(event) => { if (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) recordHistory(); }}>
       <header className="topbar">
-        <a className="back-link" href="/" title="Volver a la página de GB Motion">← GB Motion</a>
-        <span className="brand"><span className="brand-mark"><Film size={15} /></span>GB <b>MOTION</b></span>
-        <div className="topbar-group">
+        <div className="topbar-left">
+          <a className={`wordmark ${recActive ? 'is-rec' : ''}`} href="/" title="Volver a la página de GB Motion" aria-label="GB Motion, inicio">GB MOTION<i className="rec" aria-hidden="true" /></a>
+          <span className="topbar-divider" aria-hidden="true" />
           <div className="project-menu">
-            <button type="button" className="ghost-button" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>Proyecto</button>
+            <button type="button" className="ghost-button" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>Proyecto <ChevronDown size={14} aria-hidden="true" /></button>
             {menuOpen && (
               <div className="project-menu-list" role="menu" aria-label="Proyecto">
                 <button type="button" role="menuitem" title="Abrir un proyecto guardado" aria-label="Abrir proyecto" onClick={() => { setMenuOpen(false); projectFileInput.current?.click(); }}><FolderOpen size={14} /> Abrir proyecto</button>
@@ -438,25 +447,35 @@ export default function App() {
           </div>
           <button type="button" className="icon-button" aria-label="Deshacer" title="Deshacer (Ctrl+Z)" disabled={!historyStatus.undo} onClick={undo}><Undo2 size={16} /></button>
           <button type="button" className="icon-button" aria-label="Rehacer" title="Rehacer (Ctrl+Shift+Z)" disabled={!historyStatus.redo} onClick={redo}><Redo2 size={16} /></button>
-          <input className="project-name" aria-label="Nombre del proyecto" value={projectName} maxLength={80} onChange={(event) => setProjectName(event.target.value)} />
+        </div>
+        <div className="topbar-center">
+          <input className="project-name" aria-label="Nombre del proyecto" title={projectName} value={projectName} maxLength={80} onChange={(event) => setProjectName(event.target.value)} />
+          <span title={projectSaved === null ? 'No se pudo guardar. Descargá el proyecto como respaldo.' : 'Guardado en este navegador'} className={`saved ${projectSaved ? 'on' : projectSaved === null ? 'error' : ''}`}>
+            <i className="saved-dot" aria-hidden="true" /><span className="saved-label">{projectSaved ? 'Guardado' : projectSaved === null ? 'Sin guardar' : 'Guardando…'}</span>
+          </span>
+        </div>
+        <div className="topbar-right">
           {transcription.running && transcription.stage && (
             <span className="task-chip" role="status" aria-live="polite">
-              <Loader2 size={12} className="spin" aria-hidden="true" /> Subtítulos: {stageText[transcription.stage]}
+              <i className="rec" aria-hidden="true" /><span className="task-label">Subtítulos: {stageText[transcription.stage]}</span>
               <button type="button" className="linklike" onClick={transcription.cancel}>Cancelar</button>
             </span>
           )}
-          <span title={projectSaved === null ? 'No se pudo guardar. Descargá el proyecto como respaldo.' : 'Guardado en este navegador'} className={`saved ${projectSaved ? 'on' : ''}`}>{projectSaved ? <><Check size={12} /> Guardado</> : projectSaved === null ? 'Sin guardar' : 'Guardando…'}</span>
-        </div>
-        <div className="topbar-right">
+          {exportState.status === 'rendering' && (
+            <span className="task-chip" role="status" aria-live="polite">
+              <i className="rec" aria-hidden="true" /><span className="task-label">Video {Math.round((exportState.progress ?? 0) * 100)} %</span>
+              <button type="button" className="linklike" aria-label="Cancelar exportación" onClick={cancelExport}>Cancelar</button>
+            </span>
+          )}
           <ServerStatus server={server} busy={exportState.status === 'rendering'} />
-          <button className="ghost-button" onClick={() => setLibraryOpen(true)}>Biblioteca</button>
+          <button type="button" className="ghost-button library-button" aria-label="Biblioteca" title="Biblioteca" onClick={() => setLibraryOpen(true)}><Library size={15} aria-hidden="true" /><span className="library-label">Biblioteca</span></button>
           <button type="button" className={`icon-button ${advanced ? 'on' : ''}`} aria-pressed={advanced}
             title={advanced ? 'Ajustes finos activados' : 'Mostrar ajustes finos'} aria-label="Ajustes finos" onClick={() => setAdvanced((value) => !value)}>
             <Sliders size={15} />
           </button>
           {advanced && <button type="button" className="icon-button" title="Guardar en mi biblioteca" aria-label="Guardar en mi biblioteca" onClick={() => setSaveKind('motion')}><Save size={15} /></button>}
-          <button type="button" className="button primary" disabled={exportState.status === 'rendering'} onClick={() => setTool('salida')}>
-            <Play size={14} /> Exportar
+          <button type="button" className="button primary export-button" disabled={exportState.status === 'rendering'} onClick={() => setTool('salida')}>
+            <Download size={14} aria-hidden="true" /> Exportar
           </button>
         </div>
       </header>
@@ -477,56 +496,9 @@ export default function App() {
           ))}
         </nav>
 
-        <main className="stage">
-          <div className="stage-toolbar">
-            <button className="ghost-button" aria-label={playing ? 'Pausar' : 'Reproducir'} onClick={() => playing ? playerRef.current?.pause() : playerRef.current?.play()}>{playing ? <Pause size={15} /> : <Play size={15} />}</button>
-            <button className="ghost-button" onClick={() => { const frame = activeLayer.startFrame; seekTargetFrame.current = frame; playerRef.current?.seekTo(frame); setCurrentFrame(frame); playerRef.current?.play(); }}>Ver entrada</button>
-            <button className="ghost-button" aria-label={muted ? 'Activar audio' : 'Silenciar audio'} onClick={() => { if (muted) playerRef.current?.unmute(); else playerRef.current?.mute(); setMuted(!muted); }}>{muted ? <VolumeX size={15} /> : <Volume2 size={15} />}</button>
-            <label>Vista <select aria-label="Zoom del lienzo" value={canvasZoom} onChange={(e) => setCanvasZoom(Number(e.target.value))}><option value={1}>Ajustar</option><option value={1.5}>150%</option><option value={2}>200%</option></select></label>
-            <label>Zona segura <select aria-label="Zona segura" value={safeZone} onChange={(e) => setSafeZone(e.target.value as SafeZone)}>{(Object.keys(safeZoneLabels) as SafeZone[]).map((id) => <option key={id} value={id}>{safeZoneLabels[id]}</option>)}</select></label>
-            <span className="stage-format">{format.width} × {format.height}</span>
-          </div>
-          <div className="stage-viewport" ref={stageViewport}>
-            <div className={`stage-frame ratio-${format.id}`} style={{ width: stageWidth, height: stageHeight }}>
-              <Player
-                ref={playerRef}
-                component={TextComposition}
-                inputProps={inputProps}
-                durationInFrames={duration}
-                fps={30}
-                compositionWidth={format.width}
-                compositionHeight={format.height}
-                controls={false}
-                initialFrame={Math.min(30, duration - 1)}
-                loop
-                initiallyMuted
-                acknowledgeRemotionLicense
-                style={{ width: '100%', height: '100%' }}
-              />
-              <span className="safe-zone" aria-hidden="true" />
-              <SafeZoneOverlay zone={safeZone} />
-              <CanvasOverlay
-                layers={layers}
-                activeId={activeLayer.id}
-                format={format}
-                currentFrame={currentFrame}
-                onEdit={(id) => { project.setActiveLayerId(id); setTool('texto'); setTimeout(() => panelBody.current?.querySelector('textarea.caption-input')?.scrollIntoView({ block: 'center' }), 0); setTimeout(() => (panelBody.current?.querySelector('textarea.caption-input') as HTMLTextAreaElement | null)?.focus(), 0); }}
-                onSelect={selectLayer}
-                onBeginInteraction={recordHistory}
-                onChange={(id, patch) => updateLayer(id, (layer) => ({ ...layer, ...patch }))}
-              />
-            </div>
-            {showEmpty && !guide && (
-              <EmptyState
-                onPickVideo={(file) => { setShowEmpty(false); setTool('video'); pickVideo(file); }}
-                onWriteByHand={() => { setShowEmpty(false); setTool('texto'); }}
-              />
-            )}
-          </div>
-        </main>
-
         <aside className="panel" aria-label={panelTitles[tool].title}>
           <header className="panel-head">
+            <p className="panel-eyebrow">{eyebrow}</p>
             <h2>{panelTitles[tool].title}</h2>
             <p>{panelTitles[tool].hint}</p>
             {selected.length > 1 && <div className="selection-tools"><strong>{selected.length} frases seleccionadas</strong><div className="appearance-actions">
@@ -541,7 +513,6 @@ export default function App() {
               {appearanceClipboard && <><button className="ghost-button tiny" disabled={activeLayer.locked} onClick={() => updateActive((l) => ({ ...l, typography: { ...structuredClone(appearanceClipboard.typography), fontSize: l.typography.fontSize } }))}>Pegar look</button>
               <button className="ghost-button tiny" disabled={activeLayer.locked} onClick={() => updateActive((l) => ({ ...l, animation: cloneAnimation(animationForLayer(appearanceClipboard)), preset: structuredClone(appearanceClipboard.preset), overrides: { ...appearanceClipboard.overrides } }))}>Pegar movimiento</button></>}
             </div>}
-            <details className="workspace-options"><summary>Acomodar paneles</summary><label>Ancho del panel<input aria-label="Ancho del panel" type="range" min={300} max={520} value={panelWidth} onChange={(e) => setPanelWidth(Number(e.target.value))} /></label><label>Alto del timeline<input aria-label="Alto de la línea de tiempo" type="range" min={180} max={360} value={timelineHeight} onChange={(e) => setTimelineHeight(Number(e.target.value))} /></label></details>
           </header>
           <div className="panel-body" ref={panelBody}>
             {tool === 'video' && (
@@ -589,7 +560,6 @@ export default function App() {
             )}
             {tool === 'texto' && (
               <>
-                <WordTimingPanel layer={activeLayer} frame={currentFrame} onSeek={seek} onChange={(wordTiming) => updateActive((l) => ({ ...l, wordTiming }))} />
                 <TextPanel
                   key={activeLayer.id}
                   text={activeLayer.text}
@@ -607,11 +577,20 @@ export default function App() {
                   onKeywordStyle={(index, patch) => updateActive((layer) => ({ ...layer, keywords: { ...layer.keywords, [index]: { ...layer.keywords[index], ...patch } as KeywordStyle } }))}
                   onKeywordRemove={(index) => updateActive((layer) => { const keywords = { ...layer.keywords }; delete keywords[index]; return { ...layer, keywords }; })}
                 />
+                <WordTimingPanel layer={activeLayer} frame={currentFrame} onSeek={seek} onChange={(wordTiming) => updateActive((l) => ({ ...l, wordTiming }))} />
               </>
             )}
             {tool === 'estilo' && (
               <>
                 <TemplatePicker templates={captionTemplates} activeLocked={activeLayer.locked} unlockedCount={layers.filter((layer) => !layer.locked).length} onApply={applyNamedTemplate} />
+                <StyleGallery
+                  styles={stylePresets}
+                  typography={activeLayer.typography}
+                  text={activeLayer.text}
+                  onApply={(typography) => { recordHistory(); updateActive((layer) => ({ ...layer, typography: { ...typography } })); }}
+                  onSaveCurrent={() => setSaveKind('style')}
+                  onDelete={(id) => setCustomStylePresets((current) => current.filter((item) => item.id !== id))}
+                />
                 <details className="tuner template-picker"><summary>Combinaciones listas para usar</summary><div className="tuner-block template-list">
                   {[...builtInComboPresets, ...customCombos].map((combo) => <span className="combo-item" key={combo.id}>
                     <button className="ghost-button" title={combo.description} onClick={() => updateActive((l) => ({ ...l, typography: structuredClone(combo.typography), animation: cloneAnimation(combo.animation), preset: combo.animation.in?.preset ?? l.preset, overrides: combo.animation.in?.overrides ?? l.overrides }))}>{combo.name}</button>
@@ -622,14 +601,6 @@ export default function App() {
                   <button className="ghost-button" onClick={project.applyStyleToAll}>Aplicar look a todas</button>
                   <button className="ghost-button" title="Copia el look, los efectos de entrada, salida y bucle y el resaltado de esta frase a todas las demás" onClick={project.applyTemplateToAll}>Aplicar plantilla a todos</button>
                 </div>
-                <StyleGallery
-                  styles={stylePresets}
-                  typography={activeLayer.typography}
-                  text={activeLayer.text}
-                  onApply={(typography) => { recordHistory(); updateActive((layer) => ({ ...layer, typography: { ...typography } })); }}
-                  onSaveCurrent={() => setSaveKind('style')}
-                  onDelete={(id) => setCustomStylePresets((current) => current.filter((item) => item.id !== id))}
-                />
                 <StyleTuner
                   key={activeLayer.id}
                   typography={activeLayer.typography}
@@ -695,9 +666,68 @@ export default function App() {
               />
             )}
           </div>
+          <Resizer label="Ancho del panel" orientation="vertical" min={300} max={520} value={panelWidth} onChange={setPanelWidth} className="resizer-panel" />
         </aside>
+        <main className="stage">
+          <div className="stage-viewport" ref={stageViewport}>
+            <div className={`stage-frame ratio-${format.id}`} style={{ width: stageWidth, height: stageHeight }}>
+              <Player
+                ref={playerRef}
+                component={TextComposition}
+                inputProps={inputProps}
+                durationInFrames={duration}
+                fps={30}
+                compositionWidth={format.width}
+                compositionHeight={format.height}
+                controls={false}
+                initialFrame={Math.min(30, duration - 1)}
+                loop
+                initiallyMuted
+                acknowledgeRemotionLicense
+                style={{ width: '100%', height: '100%' }}
+              />
+              <span className="safe-zone" aria-hidden="true" />
+              <SafeZoneOverlay zone={safeZone} />
+              <CanvasOverlay
+                layers={layers}
+                activeId={activeLayer.id}
+                format={format}
+                currentFrame={currentFrame}
+                onEdit={(id) => { project.setActiveLayerId(id); setTool('texto'); setTimeout(() => panelBody.current?.querySelector('textarea.caption-input')?.scrollIntoView({ block: 'center' }), 0); setTimeout(() => (panelBody.current?.querySelector('textarea.caption-input') as HTMLTextAreaElement | null)?.focus(), 0); }}
+                onSelect={selectLayer}
+                onBeginInteraction={recordHistory}
+                onChange={(id, patch) => updateLayer(id, (layer) => ({ ...layer, ...patch }))}
+              />
+            </div>
+            {showEmpty && !guide && (
+              <EmptyState
+                onPickVideo={(file) => { setShowEmpty(false); setTool('video'); pickVideo(file); }}
+                onWriteByHand={() => { setShowEmpty(false); setTool('texto'); }}
+              />
+            )}
+          </div>
+          <div className="viewer-bar" role="group" aria-label="Reproducción">
+            <div className="viewer-left">
+              <span className="viewer-time" role="timer" aria-label="Tiempo actual">{formatTimecode(currentFrame)}</span>
+              <span className="viewer-total" aria-label="Duración total">/ {formatTimecode(duration)}</span>
+            </div>
+            <div className="viewer-center">
+              <button type="button" className="ghost-button" onClick={() => { const frame = activeLayer.startFrame; seekTargetFrame.current = frame; playerRef.current?.seekTo(frame); setCurrentFrame(frame); playerRef.current?.play(); }}><span className="viewer-label">Ver entrada</span></button>
+              <button type="button" className="button primary viewer-play" aria-label={playing ? 'Pausar' : 'Reproducir'} onClick={() => playing ? playerRef.current?.pause() : playerRef.current?.play()}>{playing ? <Pause size={16} /> : <Play size={16} />}</button>
+              <button type="button" className="ghost-button" aria-label={muted ? 'Activar audio' : 'Silenciar audio'} onClick={() => { if (muted) playerRef.current?.unmute(); else playerRef.current?.mute(); setMuted(!muted); }}>{muted ? <VolumeX size={15} /> : <Volume2 size={15} />}</button>
+            </div>
+            <div className="viewer-right">
+              <label><span className="viewer-label">Vista</span> <select aria-label="Zoom del lienzo" value={canvasZoom} onChange={(e) => setCanvasZoom(Number(e.target.value))}><option value={1}>Ajustar</option><option value={1.5}>150%</option><option value={2}>200%</option></select></label>
+              <label><span className="viewer-label">Zona segura</span> <select aria-label="Zona segura" value={safeZone} onChange={(e) => setSafeZone(e.target.value as SafeZone)}>{(Object.keys(safeZoneLabels) as SafeZone[]).map((id) => <option key={id} value={id}>{safeZoneLabels[id]}</option>)}</select></label>
+              <span className="viewer-format">{format.width} × {format.height}</span>
+            </div>
+          </div>
+        </main>
+
       </div>
 
+      <div className="dock-slot">
+      <Resizer label="Alto de la línea de tiempo" orientation="horizontal" invert min={180} max={360} value={timelineHeight} onChange={setTimelineHeight} className="resizer-timeline" />
       <TimelineDock
         layers={layers}
         activeId={activeLayer.id}
@@ -719,6 +749,7 @@ export default function App() {
         onToggleVisible={(id) => updateLayer(id, (layer) => ({ ...layer, visible: !layer.visible }))}
         onToggleLock={(id) => updateLayer(id, (layer) => ({ ...layer, locked: !layer.locked }))}
       />
+      </div>
 
       {handoffRequest && (
         <HandoffDialog

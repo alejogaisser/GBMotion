@@ -42,7 +42,7 @@ export function LibraryPanel({ project, layer, onOpen, onKit, onClose }: {
     <div className="control-row"><button className="button" disabled={busy} onClick={() => void save('project')}>Guardar proyecto</button><button className="button" disabled={busy} onClick={() => void save('kit')}>Guardar kit de marca</button></div>
     {error && <p className="inline-error" role="alert">{error}</p>}
     <div className="library-entries">{entries.map((entry) => <article key={entry.id}>
-      <span className="library-preview" style={entry.kind === 'kit' ? { fontFamily: entry.typography.fontFamily, color: entry.typography.color } : {}}>{entry.kind === 'kit' ? 'Aa' : entry.project.layers[0]?.text.slice(0, 26)}</span>
+      <span className="library-preview" data-font-preview style={entry.kind === 'kit' ? { fontFamily: entry.typography.fontFamily, color: entry.typography.color } : {}}>{entry.kind === 'kit' ? 'Aa' : entry.project.layers[0]?.text.slice(0, 26)}</span>
       <div><strong>{entry.name}</strong><small>{entry.kind === 'kit' ? 'Kit de marca' : 'Proyecto'} · {new Date(entry.savedAt).toLocaleString('es-AR')}</small></div>
       <button className="ghost-button" disabled={busy} onClick={() => entry.kind === 'project' ? void open(entry) : (onKit(entry), onClose())}>{entry.kind === 'project' ? 'Abrir' : 'Aplicar'}</button>
     </article>)}{!entries.length && <p>Todavía no hay copias guardadas. Tu proyecto actual sigue guardándose automáticamente.</p>}</div>
