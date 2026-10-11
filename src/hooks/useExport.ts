@@ -23,6 +23,7 @@ export const useExport = ({ inputProps, background, format, guideMediaId, guideN
   const [pastExports, setPastExports] = useState<PastExport[]>([]);
   const [exportVolume, setExportVolume] = useState(1);
   const exportJobId = useRef<string | null>(null);
+  const requestSequence = useRef(0);
   const mounted = useRef(false);
   const pollController = useRef<AbortController | null>(null);
   const capability = useRef(enabled);
@@ -51,7 +52,7 @@ export const useExport = ({ inputProps, background, format, guideMediaId, guideN
     if (!capability.current) { setExportState({ status: 'error', message: 'Para exportar video, abrí GB Motion con el servidor local.' }); return; }
     if (exportJobId.current) return;
     if (kind === 'burn' && !guideMediaId) { setExportState({ status: 'error', message: 'Subí un video en «Video» para exportarlo con subtítulos.' }); return; }
-    const requestId = `starting-${Date.now()}`;
+    const requestId = `starting-${++requestSequence.current}`;
     let ownedJobId = requestId;
     exportJobId.current = requestId;
     setExportState({ status: 'rendering', message: 'Preparando tu video…', progress: 0 });
