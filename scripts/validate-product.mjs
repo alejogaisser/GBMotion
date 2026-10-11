@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
+import { Agent, createServer, request as httpRequest } from 'node:http';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
@@ -63,6 +63,32 @@ try {
   assert.equal(response.status, 413);
   assert.deepEqual(await response.json(), { error: 'El pedido es demasiado grande.' });
   assert.equal((await fetch(`${origin}/api/health`)).status, 200);
+  // Reuse one native HTTP connection and finish uploads even after an early 413.
+  // Both content-length and chunked bodies exercise unread-upload transport.
+  const agent = new Agent({ keepAlive: true, maxSockets: 1 });
+  const oversized = Buffer.alloc(17 * 1024 * 1024, 0x20);
+  const nativeRequest = (path, { body, chunked = false } = {}) => new Promise((done, fail) => {
+    let port; let finished = false; let response;
+    const complete = () => { if (finished && response) done({ ...response, port }); };
+    const req = httpRequest(`${origin}${path}`, { method: body ? 'POST' : 'GET', agent,
+      headers: body ? { 'Content-Type': 'application/json', ...(chunked ? { 'Transfer-Encoding': 'chunked' } : { 'Content-Length': body.length }) } : {} }, (res) => {
+      port = res.socket.localPort;
+      const chunks = []; res.on('data', (chunk) => chunks.push(chunk)); res.on('error', fail);
+      res.on('end', () => { response = { status: res.statusCode, payload: JSON.parse(Buffer.concat(chunks).toString('utf8')) }; complete(); });
+    });
+    req.on('error', fail); req.setTimeout(10_000, () => req.destroy(new Error('native HTTP request timeout')));
+    req.on('finish', () => { finished = true; complete(); });
+    req.end(body);
+  });
+  try {
+    let connection;
+    for (let repeat = 0; repeat < 20; repeat++) {
+      const rejected = await nativeRequest('/api/render', { body: oversized, chunked: repeat % 2 === 1 });
+      assert.equal(rejected.status, 413); assert.deepEqual(rejected.payload, { error: 'El pedido es demasiado grande.' });
+      connection ??= rejected.port; assert.equal(rejected.port, connection, 'oversized requests reuse the same TCP connection');
+      const health = await nativeRequest('/api/health'); assert.equal(health.status, 200); assert.equal(health.port, connection, 'health remains usable on the same TCP connection');
+    }
+  } finally { agent.destroy(); }
   response = await fetch(`${origin}/api/render`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...valid, props: { ...valid.props, layers: [{}] } }) });
   assert.equal(response.status, 400);
   response = await fetch(`${origin}/api/render`, { method: 'POST', headers: { Origin: 'https://other.invalid' }, body: '{}' });
@@ -73,7 +99,7 @@ try {
     const payload = await (await fetch(`${origin}/api/health`)).json();
     assert.deepEqual(payload, { version: 1, mode: 'local', transcriptionMode, capabilities: { upload: true, render: true, transcribe } });
   }
-  console.log('PRODUCT_OK AC13-invalid AC12-final-filter AC18-handler AC19 (no real render/runtime routes)');
+  console.log('PRODUCT_OK AC13-invalid AC12-final-filter AC18=20x17MiB+20health same TCP content-length/chunked AC19 (no real render/runtime routes)');
 } finally {
   if (app) await app.close();
   if (server) await new Promise((done) => { server.close(done); server.closeIdleConnections(); });

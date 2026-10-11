@@ -14,7 +14,9 @@ export class HttpError extends Error {
 /**
  * Junta el cuerpo como Buffers y decodifica una sola vez al final: decodificar
  * chunk por chunk rompe una ñ o una tilde que quede partida entre dos chunks.
- * Si pasa el límite deja de acumular; la respuesta 413 cierra el socket al terminar.
+ * Si pasa el límite deja de acumular y descarta los chunks restantes. Conserva
+ * el transporte para que el cliente reciba el 413 completo; el timeout de Node
+ * limita un pedido que no termina de enviar su cuerpo.
  */
 export const readBody = (req: IncomingMessage, limitBytes: number): Promise<Buffer> => new Promise((resolve, reject) => {
   const chunks: Buffer[] = [];
@@ -51,10 +53,6 @@ export const readJson = async (req: IncomingMessage, limitBytes = 16 * 1024 * 10
 };
 
 export const json = (response: ServerResponse, status: number, payload: unknown) => {
-  if (status === 413) {
-    response.setHeader('Connection', 'close');
-    response.once('finish', () => response.socket?.destroy());
-  }
   response.statusCode = status;
   response.setHeader('Content-Type', 'application/json; charset=utf-8');
   response.end(JSON.stringify(payload));
