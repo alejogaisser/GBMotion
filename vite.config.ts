@@ -12,6 +12,7 @@ export default defineConfig(({ mode }) => {
   const mediaDir = resolve(process.cwd(), env.GB_MEDIA_DIR
     || (env.LOCALAPPDATA ? join(env.LOCALAPPDATA, 'gb-motion', 'media') : join(homedir(), '.gb-motion', 'media')));
   return {
+    appType: 'mpa',
     plugins: [
       react(),
       gbMotionPlugin({
@@ -30,7 +31,12 @@ export default defineConfig(({ mode }) => {
     build: {
       target: 'es2022',
       chunkSizeWarningLimit: 600,
-      rollupOptions: {
+      rolldownOptions: {
+        input: {
+          landing: resolve(process.cwd(), 'index.html'),
+          editor: resolve(process.cwd(), 'editor/index.html'),
+          notFound: resolve(process.cwd(), '404.html'),
+        },
         output: {
           // Remotion es lo más pesado: va en su propio archivo para que el resto de la app cargue rápido.
           manualChunks(id: string) {
