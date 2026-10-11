@@ -3,12 +3,413 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#08090c" />
-    <meta name="description" content="GB Motion — kinetic typography rápida y reutilizable." />
-    <title>GB Motion</title>
+    <meta name="theme-color" content="#0E0E0C" />
+    <title>GB Motion · Subtítulos animados para Reels, TikTok y Shorts</title>
+    <meta name="description" content="Escribí una frase y mirala animada. Subtítulos palabra por palabra para Reels, TikTok y Shorts: MP4, pantalla verde, ProRes con alfa y SRT/VTT." />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="es_AR" />
+    <meta property="og:site_name" content="GB Motion" />
+    <meta property="og:title" content="GB Motion · Subtítulos que se leen y se mueven" />
+    <meta property="og:description" content="Probá tu frase con estilos animados y exportá en MP4, pantalla verde, ProRes con alfa o SRT/VTT." />
+    <!-- CONFIRMAR: falta og:image. Cuando exista un still real en public/landing/ (alt: «Frase en mayúsculas sobre fondo negro, con la palabra activa resaltada en amarillo, dentro de un marco vertical.») sumar og:image y twitter:image. -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="GB Motion · Subtítulos que se leen y se mueven" />
+    <meta name="twitter:description" content="Probá tu frase con estilos animados y exportá en MP4, pantalla verde, ProRes con alfa o SRT/VTT." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230E0E0C'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%23FF3B2F'/%3E%3C/svg%3E" />
+    <script>document.documentElement.classList.add('js');</script>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <a class="skip" href="#hero">Saltar al contenido</a>
+
+    <header id="nav" class="nav">
+      <div class="nav-bar wrap">
+        <a class="wordmark" href="/" aria-label="GB Motion, inicio"><span class="rec" aria-hidden="true"></span>GB MOTION</a>
+        <nav class="nav-links" id="nav-links" aria-label="Principal">
+          <a href="#estilos">Estilos</a>
+          <a href="#como-funciona">Cómo funciona</a>
+          <a href="#exportar">Exportar</a>
+          <a href="#preguntas">Preguntas</a>
+          <a class="only-mobile" href="/editor/">Abrir el editor</a>
+        </nav>
+        <div class="nav-actions">
+          <button type="button" class="btn btn--ghost btn--sm" id="pause" aria-pressed="false" data-label-on="Pausar animaciones" data-label-off="Reanudar animaciones">Pausar animaciones</button>
+          <a class="btn btn--lima btn--sm" href="/editor/">Abrir el editor</a>
+          <button type="button" class="menu-btn" id="menu-btn" aria-expanded="false" aria-controls="nav-links" aria-label="Abrir menú"><span aria-hidden="true"></span></button>
+        </div>
+      </div>
+      <nav class="playhead" aria-label="Línea de tiempo de la página">
+        <div class="ph-track" aria-hidden="true"><div class="ph-fill"></div></div>
+        <ol class="ph-stops">
+          <li><a href="#hero" aria-label="Ir a Inicio"></a></li>
+          <li><a href="#datos" aria-label="Ir a Datos"></a></li>
+          <li><a href="#estilos" aria-label="Ir a Estilos"></a></li>
+          <li><a href="#como-funciona" aria-label="Ir a Cómo funciona"></a></li>
+          <li><a href="#motor" aria-label="Ir a El motor"></a></li>
+          <li><a href="#espanol" aria-label="Ir a Español"></a></li>
+          <li><a href="#revision" aria-label="Ir a Revisión"></a></li>
+          <li><a href="#exportar" aria-label="Ir a Exportar"></a></li>
+          <li><a href="#local" aria-label="Ir a Local"></a></li>
+          <li><a href="#preguntas" aria-label="Ir a Preguntas"></a></li>
+          <li><a href="#cierre" aria-label="Ir a Cierre"></a></li>
+        </ol>
+      </nav>
+    </header>
+
+    <main>
+      <!-- 1 · HERO -->
+      <section id="hero" class="sec sec--negro hero" aria-labelledby="hero-h1">
+        <div class="wrap hero-grid">
+          <div class="hero-copy">
+            <p class="tc"><span class="tc-time">00:00:00:00</span><span class="tc-track">V1</span><span class="tc-label">TOMA 01</span><span class="tc-rec" aria-hidden="true"><i class="rec"></i>REC</span></p>
+            <h1 id="hero-h1" class="h1">
+              <span class="kw" data-text="SUBTÍTULOS" style="--i:0">SUBTÍTULOS</span>
+              <span class="kw" data-text="QUE" style="--i:1">QUE</span>
+              <span class="kw" data-text="SE" style="--i:2">SE</span>
+              <span class="kw" data-text="LEEN" style="--i:3">LEEN</span>
+              <em class="serif"><span class="kw" data-text="y" style="--i:4">y</span> <span class="kw" data-text="se" style="--i:5">se</span> <span class="kw" data-text="mueven." style="--i:6">mueven.</span></em>
+            </h1>
+            <p class="lead">Escribí una frase, elegí un estilo y mirala en movimiento. Es el mismo motor que después exporta tu video.</p>
+            <div class="cta-row">
+              <a class="btn btn--lima" id="probar" href="#frase">Probá tu frase</a>
+              <a class="btn btn--line" href="/editor/">Abrir el editor</a>
+            </div>
+          </div>
+
+          <div class="hero-demo">
+            <p class="mono-label">VISTA PREVIA · 1080 × 1920 · 30 FPS</p>
+            <div class="frame" id="hero-demo" data-bg="dark" role="group" aria-label="ASÍ SE VE TU FRASE">
+              <p class="frame-track" aria-hidden="true">T1 · TU FRASE</p>
+              <div class="look" data-template="amarillo-impacto" id="hero-look">
+                <p class="phrase" id="hero-phrase">ASÍ SE VE TU FRASE</p>
+              </div>
+              <p class="frame-loading" id="hero-loading" hidden>CARGANDO MOTOR…</p>
+            </div>
+
+            <div class="controls">
+              <label class="field-label" for="frase">Tu frase</label>
+              <div class="field">
+                <input id="frase" name="frase" type="text" maxlength="80" autocomplete="off" spellcheck="false" placeholder="Escribí tu frase" aria-describedby="frase-count frase-nota" />
+                <span class="mono-count" id="frase-count">0/80</span>
+              </div>
+              <p class="note" id="frase-limite" hidden>Hasta 80 caracteres.</p>
+              <p class="note" id="frase-nota">Tu frase no sale de tu navegador.</p>
+
+              <div class="pick" role="radiogroup" aria-labelledby="chips-label">
+                <p class="pick-label" id="chips-label">Estilo</p>
+                <div class="chips" id="chips">
+                  <button type="button" class="chip" role="radio" aria-checked="true" tabindex="0" data-template="amarillo-impacto">Amarillo impacto</button>
+                  <button type="button" class="chip" role="radio" aria-checked="false" tabindex="-1" data-template="blanco-clasico">Blanco clásico</button>
+                  <button type="button" class="chip" role="radio" aria-checked="false" tabindex="-1" data-template="pildora-lima">Píldora lima</button>
+                  <button type="button" class="chip" role="radio" aria-checked="false" tabindex="-1" data-template="minimal-suave">Minimal suave</button>
+                  <button type="button" class="chip" role="radio" aria-checked="false" tabindex="-1" data-template="neon-noche">Neón noche</button>
+                  <button type="button" class="chip" role="radio" aria-checked="false" tabindex="-1" data-template="editorial-serif">Editorial serif</button>
+                </div>
+              </div>
+
+              <div class="pick" role="radiogroup" aria-labelledby="fondo-label">
+                <p class="pick-label" id="fondo-label">Fondo</p>
+                <div class="chips" id="fondos">
+                  <button type="button" class="chip" role="radio" aria-checked="true" tabindex="0" data-bg="dark">Oscuro</button>
+                  <button type="button" class="chip" role="radio" aria-checked="false" tabindex="-1" data-bg="green">Verde</button>
+                  <button type="button" class="chip" role="radio" aria-checked="false" tabindex="-1" data-bg="checker">Transparente</button>
+                </div>
+              </div>
+
+              <a class="btn btn--lima btn--block" id="handoff" href="/editor/" aria-label="Abrir tu frase con este estilo en el editor">Abrir en el editor →</a>
+              <p class="note note--compu">La demo anda en el celu. Para editar, mejor en compu.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2 · DATOS -->
+      <section id="datos" class="sec sec--hueso" aria-labelledby="datos-h2">
+        <div class="wrap">
+          <p class="tc rv"><span class="tc-time">00:00:04:12</span><span class="tc-track">T1</span><span class="tc-label">INVENTARIO</span></p>
+          <h2 id="datos-h2" class="h2 rv">LO QUE TRAE <em class="serif">adentro.</em></h2>
+          <ul class="datos" data-stagger>
+            <li class="rv"><span class="num" data-count="51">51</span><span class="num-label">tipografías</span></li>
+            <li class="rv"><span class="num" data-count="47">47</span><span class="num-label">efectos de movimiento</span></li>
+            <li class="rv"><span class="num" data-count="5">5</span><span class="num-label">modos de resaltado palabra por palabra</span></li>
+            <li class="rv"><span class="num" data-count="0">0</span><span class="num-label">marcas de agua en la versión local</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- 3 · ESTILOS -->
+      <section id="estilos" class="sec sec--negro" aria-labelledby="estilos-h2">
+        <div class="wrap">
+          <p class="tc rv"><span class="tc-time">00:00:09:03</span><span class="tc-track">T2</span><span class="tc-label">HOJA DE CONTACTOS</span></p>
+          <h2 id="estilos-h2" class="h2 rv">UNA FRASE. OCHO ESTILOS. <em class="serif">Probá el tuyo.</em></h2>
+          <p class="lead rv">Tocá un estilo y se aplica a tu frase de arriba.</p>
+          <!-- CONFIRMAR: las descripciones salen de src/presets/templates.ts (misma redacción que Notas/A5-copy/copy.md). Sin stills reales todavía: las tarjetas dibujan el look en HTML. -->
+          <ul class="sheet" data-stagger>
+            <li class="rv s-a">
+              <button type="button" class="card" data-template="amarillo-impacto" aria-label="Probar el estilo Amarillo impacto en tu frase">
+                <span class="look" data-template="amarillo-impacto" aria-hidden="true"><span class="phrase"><span class="w">ASÍ</span> <span class="w on">SE</span> <span class="w">VE</span></span></span>
+                <span class="card-meta"><span class="card-name">Amarillo impacto</span><span class="card-desc">Mayúsculas con peso. La palabra que suena se pinta de amarillo.</span><span class="card-go" aria-hidden="true">PROBAR ↑</span></span>
+              </button>
+            </li>
+            <li class="rv s-b">
+              <button type="button" class="card" data-template="blanco-clasico" aria-label="Probar el estilo Blanco clásico en tu frase">
+                <span class="look" data-template="blanco-clasico" aria-hidden="true"><span class="phrase"><span class="w">ASÍ</span> <span class="w on">SE</span> <span class="w">VE</span></span></span>
+                <span class="card-meta"><span class="card-name">Blanco clásico</span><span class="card-desc">Blanco y directo. La palabra activa cambia de color.</span><span class="card-go" aria-hidden="true">PROBAR ↑</span></span>
+              </button>
+            </li>
+            <li class="rv s-c">
+              <button type="button" class="card" data-template="pildora-lima" aria-label="Probar el estilo Píldora lima en tu frase">
+                <span class="look" data-template="pildora-lima" aria-hidden="true"><span class="phrase"><span class="w">ASÍ</span> <span class="w on">SE</span> <span class="w">VE</span></span></span>
+                <span class="card-meta"><span class="card-name">Píldora lima</span><span class="card-desc">La palabra activa entra en una caja lima.</span><span class="card-go" aria-hidden="true">PROBAR ↑</span></span>
+              </button>
+            </li>
+            <li class="rv s-d">
+              <button type="button" class="card" data-template="minimal-suave" aria-label="Probar el estilo Minimal suave en tu frase">
+                <span class="look" data-template="minimal-suave" aria-hidden="true"><span class="phrase"><span class="w said">así</span> <span class="w on">se</span> <span class="w">ve</span></span></span>
+                <span class="card-meta"><span class="card-name">Minimal suave</span><span class="card-desc">Trazo fino. La frase se completa como karaoke.</span><span class="card-go" aria-hidden="true">PROBAR ↑</span></span>
+              </button>
+            </li>
+            <li class="rv s-e">
+              <button type="button" class="card" data-template="revelado" aria-label="Probar el estilo Revelado palabra a palabra en tu frase">
+                <span class="look" data-template="revelado" aria-hidden="true"><span class="phrase"><span class="w said">ASÍ</span> <span class="w on">SE</span></span></span>
+                <span class="card-meta"><span class="card-name">Revelado palabra a palabra</span><span class="card-desc">Cada palabra aparece cuando se dice.</span><span class="card-go" aria-hidden="true">PROBAR ↑</span></span>
+              </button>
+            </li>
+            <li class="rv s-f">
+              <button type="button" class="card" data-template="neon-noche" aria-label="Probar el estilo Neón noche en tu frase">
+                <span class="look" data-template="neon-noche" aria-hidden="true"><span class="phrase"><span class="w">ASÍ</span> <span class="w on">SE</span> <span class="w">VE</span></span></span>
+                <span class="card-meta"><span class="card-name">Neón noche</span><span class="card-desc">Tonos neón para fondos oscuros.</span><span class="card-go" aria-hidden="true">PROBAR ↑</span></span>
+              </button>
+            </li>
+            <li class="rv s-g">
+              <button type="button" class="card" data-template="editorial-serif" aria-label="Probar el estilo Editorial serif en tu frase">
+                <span class="look" data-template="editorial-serif" aria-hidden="true"><span class="phrase"><span class="w said">así</span> <span class="w on">se</span> <span class="w">ve</span></span></span>
+                <span class="card-meta"><span class="card-name">Editorial serif</span><span class="card-desc">Serif con karaoke, para un tono más pausado.</span><span class="card-go" aria-hidden="true">PROBAR ↑</span></span>
+              </button>
+            </li>
+            <li class="rv s-h">
+              <button type="button" class="card" data-template="terminal" aria-label="Probar el estilo Terminal en tu frase">
+                <span class="look" data-template="terminal" aria-hidden="true"><span class="phrase"><span class="w said">&gt; así</span> <span class="w on">se</span></span></span>
+                <span class="card-meta"><span class="card-name">Terminal</span><span class="card-desc">Letra de máquina. Las palabras aparecen una por una.</span><span class="card-go" aria-hidden="true">PROBAR ↑</span></span>
+              </button>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- 4 · CÓMO FUNCIONA -->
+      <section id="como-funciona" class="sec sec--hueso" aria-labelledby="como-h2">
+        <div class="wrap">
+          <p class="tc rv"><span class="tc-time">00:00:15:20</span><span class="tc-track">V1</span><span class="tc-label">MONTAJE</span></p>
+          <h2 id="como-h2" class="h2 rv">DEL VIDEO AL SUBTÍTULO, <em class="serif">en tres cortes.</em></h2>
+          <div class="timeline" id="timeline">
+            <div class="ruler" aria-hidden="true"><span>00</span><span>05</span><span>10</span><span>15</span><span>20</span></div>
+            <ol class="clips" data-stagger>
+              <li class="clip rv">
+                <p class="clip-tag">CLIP 01</p>
+                <h3 class="h3">Subí tu video</h3>
+                <p>Cargalo en el editor. Se queda en tu compu.</p>
+              </li>
+              <li class="clip rv">
+                <p class="clip-tag">CLIP 02</p>
+                <h3 class="h3">Generá subtítulos palabra por palabra</h3>
+                <p>Con IA o a mano. Corregís el texto y los tiempos de cada palabra.</p>
+              </li>
+              <li class="clip rv">
+                <p class="clip-tag">CLIP 03</p>
+                <h3 class="h3">Ajustá y exportá</h3>
+                <p>Elegí estilo y movimiento, y bajá el formato que necesites.</p>
+              </li>
+            </ol>
+            <div class="tl-head" aria-hidden="true"></div>
+          </div>
+          <p class="note-box rv">Los subtítulos automáticos necesitan una clave de ElevenLabs o Groq configurada en la versión local. Sin clave, los escribís vos y el resto funciona igual.</p>
+        </div>
+      </section>
+
+      <!-- 5 · EL MOTOR -->
+      <section id="motor" class="sec sec--negro" aria-labelledby="motor-h2">
+        <div class="wrap motor-grid">
+          <div>
+            <p class="tc rv"><span class="tc-time">00:00:21:08</span><span class="tc-track">T3</span><span class="tc-label">MOVIMIENTO</span></p>
+            <h2 id="motor-h2" class="h2 rv">ENTRA. SE QUEDA. <em class="serif">Sale.</em></h2>
+            <p class="lead rv">Controlás cómo entra, cómo se queda y cómo sale cada frase.</p>
+            <p class="rv">47 efectos de movimiento entre entrada, bucle y salida. Los combinás frase por frase.</p>
+          </div>
+          <div class="tracks rv" aria-hidden="true">
+            <div class="track"><span class="track-name">ENTRADA</span><span class="lane"><i class="blk blk--a"></i><i class="blk blk--b"></i></span></div>
+            <div class="track"><span class="track-name">BUCLE</span><span class="lane"><i class="blk blk--c"></i><i class="blk blk--d"></i></span></div>
+            <div class="track"><span class="track-name">SALIDA</span><span class="lane"><i class="blk blk--e"></i><i class="blk blk--f"></i></span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6 · ESPAÑOL -->
+      <section id="espanol" class="sec sec--hueso" aria-labelledby="espanol-h2">
+        <div class="wrap espanol-grid">
+          <div class="muestra rv" aria-hidden="true"><span class="hlc" data-text="¿¡ÑÁÉÍÓÚ!?">¿¡ÑÁÉÍÓÚ!?</span></div>
+          <div>
+            <p class="tc rv"><span class="tc-time">00:00:27:15</span><span class="tc-track">T2</span><span class="tc-label">IDIOMA ES</span></p>
+            <h2 id="espanol-h2" class="h2 rv">PENSADO EN <em class="serif">español.</em></h2>
+            <ul class="puntos" data-stagger>
+              <li class="rv">Tildes, eñes y signos de apertura, probados en las 51 tipografías.</li>
+              <li class="rv">El agrupado de palabras está pensado para cómo hablamos.</li>
+              <li class="rv">Los subtítulos automáticos filtran muletillas como “eh”, “em” o “mm”.</li>
+              <li class="rv">La interfaz está en español, de punta a punta.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7 · REVISIÓN -->
+      <section id="revision" class="sec sec--negro" aria-labelledby="revision-h2">
+        <div class="wrap revision-grid">
+          <div>
+            <p class="tc rv"><span class="tc-time">00:00:33:00</span><span class="tc-track">QC</span><span class="tc-label">REVISIÓN</span></p>
+            <h2 id="revision-h2" class="h2 rv">UNA PASADA MÁS <em class="serif">antes de exportar.</em></h2>
+            <p class="lead rv">Antes de exportar, GB Motion te avisa qué frase cuesta leer. Vos decidís.</p>
+            <!-- CONFIRMAR: el copy completo agrega «Los límites son orientativos y los ajustás vos.»; se omite hasta confirmar que el umbral es editable desde la UI. -->
+            <p class="rv">Son avisos, no bloqueos: podés exportar igual.</p>
+          </div>
+          <div class="mock rv" role="img" aria-label="Ejemplo del panel de revisión con tres avisos">
+            <p class="mock-title">REVISIÓN · 3 AVISOS</p>
+            <ul class="mock-list" aria-hidden="true">
+              <li><span class="mock-tc">00:00:04:10</span><span><b>Muy rápida</b>Más de 20 caracteres por segundo.</span></li>
+              <li><span class="mock-tc">00:00:09:22</span><span><b>Palabra fuera del clip</b>“ACÁ” termina después de la frase.</span></li>
+              <li><span class="mock-tc">00:00:12:05</span><span><b>Frase vacía</b>Está visible pero no tiene texto.</span></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- 8 · EXPORTAR -->
+      <section id="exportar" class="sec sec--hueso" aria-labelledby="exportar-h2">
+        <div class="wrap">
+          <p class="tc rv"><span class="tc-time">00:00:38:22</span><span class="tc-track">OUT</span><span class="tc-label">ENTREGA</span></p>
+          <h2 id="exportar-h2" class="h2 rv">EXPORTÁ <em class="serif">como lo necesites.</em></h2>
+        </div>
+        <div class="wrap exp-grid" data-stagger>
+          <article class="exp exp--mp4 rv">
+            <p class="mono-label">MP4 · CON TU VIDEO</p>
+            <div class="exp-art" aria-hidden="true"><span class="exp-phrase">ASÍ SE VE <b>TU FRASE</b></span></div>
+            <h3 class="h3">Subtítulos quemados</h3>
+            <p>Tus subtítulos sobre tu video, con su audio. Listo para subir.</p>
+          </article>
+          <article class="exp exp--alfa rv">
+            <p class="mono-label">PRORES 4444 · ALFA</p>
+            <div class="exp-art" aria-hidden="true"><span class="exp-phrase">ASÍ SE VE <b>TU FRASE</b></span></div>
+            <h3 class="h3">Transparencia real</h3>
+            <p>Los subtítulos sin fondo, con canal alfa, para ponerlos arriba de tu video.</p>
+          </article>
+          <article class="exp exp--srt rv">
+            <p class="mono-label">SRT · VTT</p>
+            <pre class="exp-art exp-art--srt" aria-hidden="true">1
+00:00:00,000 --&gt; 00:00:01,200
+ASÍ SE VE TU FRASE</pre>
+            <h3 class="h3">Subtítulos como texto</h3>
+            <p>Archivos con tiempos para la plataforma o para otro editor.</p>
+          </article>
+        </div>
+        <div class="verde-band" id="verde">
+          <div class="wrap verde-inner">
+            <div class="verde-art" aria-hidden="true"><span class="exp-phrase">ASÍ SE VE <b>TU FRASE</b></span></div>
+            <div class="verde-copy">
+              <p class="mono-label">MP4 · #00FF00</p>
+              <h3 class="h3">Pantalla verde</h3>
+              <p>Solo el texto sobre verde, para recortarlo con chroma en tu editor.</p>
+            </div>
+          </div>
+        </div>
+        <div class="wrap">
+          <p class="rv">Y el proyecto en JSON, para seguir otro día.</p>
+          <p class="note-box rv">Exportar video requiere la versión local. SRT, VTT y JSON funcionan también desde el navegador.</p>
+        </div>
+      </section>
+
+      <!-- 9 · LOCAL -->
+      <section id="local" class="sec sec--negro" aria-labelledby="local-h2">
+        <div class="wrap local-grid">
+          <div>
+            <p class="tc rv"><span class="tc-time">00:00:45:10</span><span class="tc-track">V1</span><span class="tc-label">LOCAL 127.0.0.1</span></p>
+            <h2 id="local-h2" class="h2 rv">TU VIDEO <em class="serif">se queda con vos.</em></h2>
+            <p class="lead rv">En la versión local tu video queda en tu compu; para los subtítulos con IA solo se envía el audio al proveedor que configures.</p>
+            <p class="rv">Exportar video requiere la versión local.</p>
+            <div class="cta-row rv"><a class="btn btn--lima" href="/editor/">Abrir el editor</a></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 10 · PREGUNTAS -->
+      <section id="preguntas" class="sec sec--hueso" aria-labelledby="preguntas-h2">
+        <div class="wrap faq-wrap">
+          <p class="tc rv"><span class="tc-time">00:00:51:05</span><span class="tc-track">T4</span><span class="tc-label">PREGUNTAS</span></p>
+          <h2 id="preguntas-h2" class="h2 rv">PREGUNTAS <em class="serif">antes del primer corte.</em></h2>
+          <div class="faq">
+            <details>
+              <summary>¿Es gratis?</summary>
+              <p>Sí, la versión local es gratis. Los subtítulos automáticos usan tu clave de ElevenLabs o Groq, y ese uso depende de tu cuenta con el proveedor.</p>
+            </details>
+            <details>
+              <summary>¿Tiene marca de agua?</summary>
+              <p>No. Lo que exportás desde la versión local sale sin marca de agua.</p>
+            </details>
+            <details>
+              <summary>¿Mi video se sube a algún lado?</summary>
+              <p>En la versión local, tu video no sale de tu compu: el navegador lo pasa al servidor que corre en esa misma PC, y ahí se guardan los exports. Para los subtítulos con IA solo se envía el audio al proveedor que configuraste, nunca el video. La demo de esta página tampoco envía tu frase: todo pasa en tu navegador.</p>
+            </details>
+            <details>
+              <summary>¿Qué necesito para los subtítulos automáticos?</summary>
+              <p>Una clave de API de ElevenLabs o de Groq configurada en la versión local. Sin clave podés escribir los subtítulos a mano y usar todo lo demás: estilos, movimiento y exports.</p>
+            </details>
+            <details>
+              <summary>¿Qué es la versión local?</summary>
+              <!-- CONFIRMAR: cómo se consigue la versión local (repo + instrucciones o «próximamente»). Pregunta abierta 1 del plan; no se agrega nada hasta que Alejo lo defina. -->
+              <p>Es GB Motion corriendo en tu compu. Abrís el editor en el navegador y el servidor que exporta los videos funciona en tu máquina, sin cuenta.</p>
+            </details>
+            <details>
+              <summary>¿Se puede usar en el celu?</summary>
+              <p>Esta página y la demo, sí. Para editar, GB Motion está pensado para la compu: si lo abrís desde el celu, te avisa y podés seguir igual.</p>
+            </details>
+            <details>
+              <summary>¿Qué formatos exporta?</summary>
+              <p>MP4 con tus subtítulos sobre el video, MP4 con pantalla verde, ProRes 4444 con transparencia, SRT, VTT y el proyecto en JSON.</p>
+            </details>
+            <details>
+              <summary>¿Tengo que crear una cuenta?</summary>
+              <p>No. No hay registro ni cuentas.</p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- 11 · CIERRE -->
+      <section id="cierre" class="sec sec--negro cierre" aria-labelledby="cierre-h2">
+        <div class="wrap">
+          <p class="tc rv"><span class="tc-time">00:00:58:29</span><span class="tc-track">FIN</span><span class="tc-label">CORTE FINAL</span></p>
+          <h2 id="cierre-h2" class="h2 h2--xl">
+            <span class="kw kw--loop" data-text="EMPEZÁ" style="--i:0">EMPEZÁ</span>
+            <span class="kw kw--loop" data-text="A" style="--i:1">A</span>
+            <span class="kw kw--loop" data-text="SUBTITULAR" style="--i:2">SUBTITULAR</span>
+          </h2>
+          <div class="cta-row rv">
+            <a class="btn btn--lima" href="/editor/">Abrir el editor</a>
+            <a class="btn btn--line" href="#frase" data-focus-frase>Probá tu frase</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap foot-row">
+        <p class="foot-copy">© 2026 GB Motion</p>
+        <!-- CONFIRMAR: las URLs de las redes asumen el usuario @gaisserbuilds en cada plataforma. -->
+        <p class="foot-redes"><span class="mono-label">@gaisserbuilds</span>
+          <a href="https://x.com/gaisserbuilds" rel="noopener" aria-label="@gaisserbuilds en X">X</a>
+          <a href="https://www.instagram.com/gaisserbuilds" rel="noopener" aria-label="@gaisserbuilds en Instagram">Instagram</a>
+          <a href="https://www.tiktok.com/@gaisserbuilds" rel="noopener" aria-label="@gaisserbuilds en TikTok">TikTok</a>
+        </p>
+      </div>
+    </footer>
+
+    <script type="module" src="/src/landing/main.ts"></script>
   </body>
 </html>
